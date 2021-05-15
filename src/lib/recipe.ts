@@ -20,6 +20,7 @@ export interface Recipe {
   excludeDirs?: string[];
   imports?: string[];
   sourcePath?: string;
+  meta?: any;
 }
 
 /**
@@ -48,16 +49,14 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
     from: recipe.from ? join(root, recipe.from) : null,
     to,
     type: recipe.from ? 'disk' : 'stub',
+    imports: recipe.imports?.map((iPath) => join(root, iPath)),
   };
 
   try {
     const url = new URL(recipe.from);
 
-    output = {
-      from: recipe.from,
-      to,
-      type: /\.fstr\.js(on)?$/.test(url.pathname) ? 'remote' : 'repo',
-    };
+    output.from = recipe.from;
+    output.type = /\.fstr\.js(on)?$/.test(url.pathname) ? 'remote' : 'repo';
   } catch (e) {}
 
   logger.log('resolveRecipePaths output', output);

@@ -40,9 +40,9 @@ export const prefetchRemotes = async (recipes: Recipe[], options: CliOptions, re
   }
 
   if (first) {
-    await Promise.all([...new Set(remotes)].map(repo => fetchSource(repo, options)))
+    await Promise.all([...new Set(remotes)].map((repo) => fetchSource(repo, options)));
   }
-}
+};
 
 /**
  * { function_description }
@@ -72,7 +72,7 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
     renderer.registerTemplater('.js', handler);
   }
 
-  recipe.imports?.forEach?.((file) => require(file)(renderer));
+  recipe.imports?.forEach?.((file) => require(file).default(recipe, renderer));
 
   await renderer.render();
 };
@@ -95,7 +95,7 @@ export const runRecipesParallel = async (recipes: Recipe[], handler: Handler, so
       if (recipe.recipes?.length) {
         await runRecipesParallel(recipe.recipes, handler, sourceDirs, options);
       }
-    })
+    }),
   );
 };
 
@@ -127,7 +127,6 @@ export const runRecipesSerial = async (recipes: Recipe[], handler: Handler, sour
   }
 };
 
-
 /**
  * TODO: support inline recipes
  * export const fst = async (pathlike: (string | RecipeSchema)[], options?: CliOptions): Promise<void> => {
@@ -154,7 +153,7 @@ export const fst = async (pathlike: string[], options?: CliOptions): Promise<voi
 
     handler = recipeHandler(recipes, options);
 
-    if ((options as any)?.sync) {
+    if ((options as { sync: boolean })?.sync) {
       await runRecipesSerial(recipes, handler, sourceDirs, options);
     } else {
       await prefetchRemotes(recipes, options);

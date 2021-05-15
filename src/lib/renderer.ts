@@ -21,8 +21,8 @@ export interface RenderOptions {
  * @class Renderer (name)
  */
 export class Renderer {
-  handlers: Record<string, Handler> = {};
-  templaters: Record<string, Handler> = {};
+  handlers: Record<string, Handler[]> = {};
+  templaters: Record<string, Handler[]> = {};
   dest: string;
   root: FNode;
 
@@ -40,7 +40,7 @@ export class Renderer {
    * @param {Handler}  templater  The templater
    */
   registerTemplater(ext: string, templater: Handler) {
-    this.templaters[ext] = templater;
+    this.templaters[ext] = [...(this.templaters[ext] || []), templater];
   }
 
   /**
@@ -50,7 +50,7 @@ export class Renderer {
    * @param {Handler}  handler  The handler
    */
   registerHandler(key: string, handler: Handler) {
-    this.handlers[key] = handler;
+    this.handlers[key] = [...(this.handlers[key] || []), handler];
   }
 
   /**
@@ -70,17 +70,21 @@ export class Renderer {
         await promises.rmdir(this.dest, { recursive: true });
       }
     }
-    const handler = this.handlers[node.action];
-    const engine = this.templaters[node.ext];
+    const handlers = this.handlers[node.action];
+    const engines = this.templaters[node.ext];
 
-    if (handler) {
-      await handler(node);
+    if (handlers?.length) {
+      for (const handler of handlers) {
+        await handler(node);
+      }
     } else {
       await node.generate();
     }
 
-    if (engine) {
-      await engine(node);
+    if (engines?.length) {
+      for (const engine of engines) {
+        await engine(node);
+      }
     }
 
     node.resolve();
