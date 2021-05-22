@@ -40,7 +40,7 @@ export class Renderer {
    * @param {Handler}  templater  The templater
    */
   registerFilenameHandler(ext: string, templater: Handler) {
-    this.templaters[ext] = [...(this.templaters[ext] || []), templater];
+    this.templaters[ext] = [].concat(this.handlers[ext], templater);
   }
 
   /**
@@ -50,7 +50,7 @@ export class Renderer {
    * @param {Handler}  handler  The handler
    */
   registerKeyHandler(key: string, handler: Handler) {
-    this.handlers[key] = [...(this.handlers[key] || []), handler];
+    this.handlers[key] = [].concat(this.handlers[key], handler);
   }
 
   /**
