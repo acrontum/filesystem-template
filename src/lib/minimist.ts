@@ -305,12 +305,15 @@ export const minimist = <T = Record<string, any>>(args: string[], opts?: Opts): 
       }
 
       const key = arg.slice(-1)[0];
+
       if (!broken && key !== '-') {
-        if (args[i + 1] && !/^(-|--)[^-]/.test(args[i + 1]) && !flags.bools[key] && (aliases[key] ? !aliasIsBoolean(key) : true)) {
-          setArg(key, args[i + 1], arg);
+        const nextArg = args[i + 1];
+
+        if (nextArg && !/^(-|--)[^-]/.test(nextArg) && !flags.bools[key] && (aliases[key] ? !aliasIsBoolean(key) : true)) {
+          setArg(key, nextArg, arg);
           i++;
-        } else if (args[i + 1] && /^(true|false)$/.test(args[i + 1])) {
-          setArg(key, args[i + 1] === 'true', arg);
+        } else if (nextArg && /^(true|false)$/.test(nextArg)) {
+          setArg(key, nextArg === 'true', arg);
           i++;
         } else {
           setArg(key, flags.strings[key] ? '' : true, arg);
