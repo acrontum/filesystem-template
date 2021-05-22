@@ -1,6 +1,7 @@
 export const LogLevels = {
   none: 0,
   error: 1,
+  trace: 1,
   warn: 2,
   info: 3,
   log: 4,
@@ -49,6 +50,15 @@ export class LoggingService {
    */
   error(...args: any): void {
     return this.bindLog('error').apply(console, args);
+  }
+
+  /**
+   * { function_description }
+   *
+   * @param {any}  args  The arguments
+   */
+  trace(...args: any): void {
+    return this.bindLog('trace').apply(console, args);
   }
 
   /**
