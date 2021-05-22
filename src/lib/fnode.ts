@@ -137,7 +137,7 @@ export class FNode {
    * @return {Promise<string[]>}  { description_of_the_return_value }
    */
   async generate(name?: string | PathGetter): Promise<string[]> {
-    logger.debug(`[${this.name}] generate`);
+    logger.debug(`${this.name}: generate`);
     try {
       if (this.isDir) {
         await this.mkdir(name);
@@ -170,7 +170,7 @@ export class FNode {
           const dir = join(out, getFileName(out));
           await promises.mkdir(dir, { recursive: true });
           this.outputs.push(dir);
-          logger.debug(`[${this.name}] out ${dir}`);
+          logger.debug(`${this.name}: out ${dir}`);
 
           return dir;
         }),
@@ -195,7 +195,7 @@ export class FNode {
         const dir = join(out, getFileName(out));
         await promises.copyFile(this.realPath, dir);
         this.outputs.push(dir);
-        logger.debug(`[${this.name}] out ${dir}`);
+        logger.debug(`${this.name}: out ${dir}`);
 
         return dir;
       }),
@@ -237,7 +237,7 @@ export class FNode {
   private prepare(): void {
     this.generated = new Promise<void>((resolve, reject) => {
       this.resolve = () => {
-        logger.debug(`[${this.name}] resolved`);
+        logger.debug(`${this.name}: resolved`);
         resolve();
       };
       this.reject = reject;
