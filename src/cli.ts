@@ -44,11 +44,10 @@ const alias: Record<string, string> = { r: '_', recipe: '_' };
 const args = booleans.concat(strings);
 
 for (let i = 0; i < args.length; i += 2) {
-  if (args[i] !== 'r' && args[i + 1] !== 'recipe') {
+  if (args[i] !== 'r' && args[i] !== 'recipe') {
     alias[args[i]] = args[i + 1];
   }
 }
-
 /**
  * { function_description }
  *
@@ -77,7 +76,7 @@ export const cli = async () => {
         return true;
       }
 
-      console.error(`unknown option '${opt}'\n\n${usage}`);
+      logger.error(`unknown option '${opt}'\n\n${usage}`);
       process.exit(1);
     },
     boolean: booleans,
@@ -86,13 +85,13 @@ export const cli = async () => {
   });
 
   if (options.help) {
-    console.log(usage);
+    logger.log(usage);
     process.exit(0);
   }
 
   if (!options._?.length) {
-    console.error('at least one recipe or uri is required\n');
-    console.error(usage);
+    logger.error('at least one recipe or uri is required\n');
+    logger.error(usage);
     process.exit(1);
   }
 
@@ -112,5 +111,5 @@ export const cli = async () => {
 };
 
 if (require.main === module) {
-  cli().catch(console.error);
+  cli().catch(e => logger.error(e));
 }
