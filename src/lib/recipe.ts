@@ -1,3 +1,5 @@
+import { fdir } from 'fdir';
+import { lstatSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { URL } from 'url';
 import { CliOptions } from '../cli';
@@ -18,7 +20,8 @@ export interface Recipe {
   recursive?: boolean;
   includeDirs?: string[];
   excludeDirs?: string[];
-  imports?: string[];
+  prerender?: string[];
+  postrender?: string[];
   sourcePath?: string;
   meta?: any;
 }
@@ -31,6 +34,21 @@ export interface Recipe {
  * @return {boolean}  True if the specified file is recipe file, False otherwise.
  */
 export const isRecipeFile = (file: string): boolean => /\.fstr\.js(on)?/.test(file);
+
+/**
+ * Collect javascript files from a folder
+ *
+ * @param  {string}    fileOrFolder  The file or folder
+ *
+ * @return {string[]}  An array of full paths
+ */
+export const collectScriptFiles = (fileOrFolder: string): string[] => {
+  if (lstatSync(fileOrFolder).isDirectory()) {
+    return new fdir().crawlWithOptions(fileOrFolder, { includeBasePath: true, filters: [(p) => p.endsWith('.js')] }).sync() as string[];
+  }
+
+  return [fileOrFolder];
+};
 
 /**
  * { function_description }
@@ -49,8 +67,12 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
     from: recipe.from ? join(root, recipe.from) : null,
     to,
     type: recipe.from ? 'disk' : 'stub',
-    imports: recipe.imports?.map((iPath) => join(root, iPath)),
+    prerender: recipe.prerender?.map((iPath) => join(root, iPath)),
+    postrender: recipe.postrender?.map((iPath) => join(root, iPath)),
   };
+
+  output.prerender = output.prerender?.reduce?.((files, path) => files.concat(collectScriptFiles(path)), []);
+  output.postrender = output.postrender?.reduce?.((files, path) => files.concat(collectScriptFiles(path)), []);
 
   try {
     const url = new URL(recipe.from);

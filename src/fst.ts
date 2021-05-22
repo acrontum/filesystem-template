@@ -1,6 +1,6 @@
 import { promises } from 'fs';
 import { CliOptions } from './cli';
-import { fetchSource, FNode, Handler, LoggingService, parseRecipeFile, Recipe, Renderer, tree, SourceOptions } from './lib';
+import { fetchSource, FNode, Handler, LoggingService, parseRecipeFile, Recipe, Renderer, SourceOptions, tree } from './lib';
 
 const logger = new LoggingService('fst');
 
@@ -12,11 +12,11 @@ const logger = new LoggingService('fst');
  *
  * @return {Handler}   { description_of_the_return_value }
  */
-export const recipeHandler = (recipes: Recipe[], options?: CliOptions): Handler => async (node: FNode): Promise<void> => {
-  if (/\.fstr\.js(on)?$/.test(node.name)) {
+export const recipeHandler =
+  (recipes: Recipe[], options?: CliOptions): Handler =>
+  async (node: FNode): Promise<void> => {
     node.outputs.forEach((output) => recipes.push(...parseRecipeFile(output, options)));
-  }
-};
+  };
 
 /**
  * { function_description }
@@ -68,11 +68,11 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
 
   const renderer = new Renderer(root, recipe.to);
   if (options?.recursive || recipe.recursive) {
-    renderer.registerTemplater('.json', handler);
-    renderer.registerTemplater('.js', handler);
+    renderer.registerFilenameHandler('.fstr.json', handler);
+    renderer.registerFilenameHandler('.fstr.js', handler);
   }
 
-  recipe.imports?.forEach?.((file) => require(file).default(recipe, renderer));
+  recipe.prerender?.forEach?.((file) => require(file).default(recipe, renderer));
 
   await renderer.render();
 };
@@ -91,6 +91,7 @@ export const runRecipesParallel = async (recipes: Recipe[], handler: Handler, so
   await Promise.all(
     recipes.map(async (recipe) => {
       await runRecipe(recipe, handler, sourceDirs, { ...options, cache: true, silence: true });
+      recipe.postrender?.forEach?.((file) => require(file).default(recipe));
 
       if (recipe.recipes?.length) {
         await runRecipesParallel(recipe.recipes, handler, sourceDirs, options);
@@ -110,16 +111,12 @@ export const runRecipesParallel = async (recipes: Recipe[], handler: Handler, so
  * @return {Promise<void>}  { description_of_the_return_value }
  */
 export const runRecipesSerial = async (recipes: Recipe[], handler: Handler, sourceDirs: string[], options?: CliOptions): Promise<void> => {
-  try {
-    for (const recipe of recipes) {
-      await runRecipe(recipe, handler, sourceDirs, options);
+  for (const recipe of recipes) {
+    await runRecipe(recipe, handler, sourceDirs, options);
 
-      if (recipe.recipes?.length) {
-        recipes.push(...recipe.recipes);
-      }
+    if (recipe.recipes?.length) {
+      recipes.push(...recipe.recipes);
     }
-  } catch (e) {
-    logger.error('Error parsing recipes\n', e, '\n', JSON.stringify({ sourceDirs, recipes }));
   }
 
   if (!options?.cache) {
@@ -160,7 +157,7 @@ export const fst = async (pathlike: string[], options?: CliOptions): Promise<voi
       await runRecipesParallel(recipes, handler, sourceDirs, options);
     }
   } catch (e) {
-    logger.error('Error parsing recipes\n', e, '\n', JSON.stringify({ sourceDirs, recipes }));
+    logger.trace('Error parsing recipes\n', e, '\n', JSON.stringify({ sourceDirs, recipes }));
   }
 
   if (!options?.cache) {
