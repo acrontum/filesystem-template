@@ -1,0 +1,6 @@
+{
+  "from": "trees/less-simple",
+  "to": "out",
+  "prerender":["fstr-files"],
+  "postrender":[]
+}

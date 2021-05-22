@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc -p .",
     "watch": "tsc-watch -p . --onSuccess 'echo done'",
-    "fmt": "prettier --write src/**/*.ts"
+    "fmt": "prettier --write src/**/*.ts",
+    "test": "node dist/src/cli.js -r test/test.fstr.json"
   },
   "files": [
     "dist",
