@@ -47,7 +47,7 @@ export const collectScriptFiles = (fileOrFolder: string): string[] => {
     return new fdir().crawlWithOptions(fileOrFolder, { includeBasePath: true, filters: [(p) => p.endsWith('.js')] }).sync() as string[];
   }
 
-  return [fileOrFolder];
+  return fileOrFolder.endsWith('.js') ? [fileOrFolder] : [];
 };
 
 /**
