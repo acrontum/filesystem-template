@@ -1,5 +1,5 @@
-import { basename, relative } from 'path';
 import { promises } from 'fs';
+import { basename, relative } from 'path';
 import { FNode } from './fnode';
 
 export type Handler = (node: FNode) => Promise<any>;
@@ -39,7 +39,7 @@ export class Renderer {
    * @param {string}   ext        The extent
    * @param {Handler}  templater  The templater
    */
-  registerTemplater(ext: string, templater: Handler) {
+  registerFilenameHandler(ext: string, templater: Handler) {
     this.templaters[ext] = [...(this.templaters[ext] || []), templater];
   }
 
@@ -49,7 +49,7 @@ export class Renderer {
    * @param {string}   key      The key
    * @param {Handler}  handler  The handler
    */
-  registerHandler(key: string, handler: Handler) {
+  registerKeyHandler(key: string, handler: Handler) {
     this.handlers[key] = [...(this.handlers[key] || []), handler];
   }
 
@@ -71,7 +71,6 @@ export class Renderer {
       }
     }
     const handlers = this.handlers[node.action];
-    const engines = this.templaters[node.ext];
 
     if (handlers?.length) {
       for (const handler of handlers) {
@@ -81,9 +80,12 @@ export class Renderer {
       await node.generate();
     }
 
-    if (engines?.length) {
-      for (const engine of engines) {
-        await engine(node);
+    if (!node.isDir) {
+      const engines = node.exts.reduce((exts, ext) => exts.concat([...(this.templaters[ext] || [])]), []);
+      if (engines?.length) {
+        for (const engine of engines) {
+          await engine(node);
+        }
       }
     }
 
@@ -97,11 +99,11 @@ export class Renderer {
    * { function_description }
    */
   private registerDefaultHandlers(): void {
-    this.registerHandler('each', (node) => {
+    this.registerKeyHandler('each', (node) => {
       return Promise.all(node.args?.values?.map?.((v: string) => node.generate(v)));
     });
 
-    this.registerHandler('dirname', (node) => {
+    this.registerKeyHandler('dirname', (node) => {
       return node.generate((prev) => node.name.replace('{dirname}', basename(prev)));
     });
   }

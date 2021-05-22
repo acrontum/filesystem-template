@@ -1,5 +1,5 @@
 import { promises } from 'fs';
-import { basename, extname, join } from 'path';
+import { basename, join } from 'path';
 import { LoggingService } from './log.service';
 
 export type PathGetter = (p?: string) => string;
@@ -25,7 +25,7 @@ export class FNode {
   baseUrl?: string;
   root?: FNode;
   parent?: FNode;
-  ext?: string;
+  exts?: string[];
   action?: string;
   args?: Record<string, any>;
   waitSiblings?: boolean;
@@ -37,8 +37,15 @@ export class FNode {
     this.isDir = type === 'dir';
     this.outputs = [];
     this.children = [];
+    this.exts = [];
     if (!this.isDir) {
-      this.ext = extname(this.relativePath);
+      const exts = this.name.split('.');
+      let prefix = '';
+      while (exts?.length) {
+        this.exts.push(`${prefix}${exts.join('.')}`);
+        exts.shift();
+        prefix = '.';
+      }
     }
     this.prepare();
   }
