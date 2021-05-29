@@ -21,32 +21,6 @@ export const recipeHandler =
 /**
  * { function_description }
  *
- * @param {Recipe[]}          recipes         The recipes
- * @param {CliOptions}        options         The options
- * @param {(Array|string[])}  [remotes=null]  The remotes
- */
-export const prefetchRemotes = async (recipes: Recipe[], options: CliOptions, remotes: string[] = null) => {
-  const first = remotes === null;
-  remotes = remotes || [];
-
-  for (const r of recipes) {
-    if (r?.type == 'repo' || r.type === 'remote') {
-      remotes.push(r.from);
-    }
-
-    if (r.recipes?.length) {
-      await prefetchRemotes(r.recipes, options, remotes);
-    }
-  }
-
-  if (first) {
-    await Promise.all([...new Set(remotes)].map((repo) => fetchSource(repo, options)));
-  }
-};
-
-/**
- * { function_description }
- *
  * @param {Recipe}            recipe                             The recipe
  * @param {Handler}           handler                            The handler
  * @param {(Array|string[])}  sourceDirs                         The source dirs
