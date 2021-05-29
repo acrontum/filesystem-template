@@ -58,7 +58,7 @@ for (let i = 0; i < args.length; i += 2) {
  * @return {RecipeOptions}  The recipe options.
  */
 const cliToRecipe = (input: CliOptions): RecipeOptions => {
-  return ['recursive', 'output', 'include', 'exclude', 'imports', 'cache', 'sync'].reduce((rOpts: RecipeOptions, key: string) => {
+  return ['recursive', 'output', 'include', 'exclude', 'imports', 'cache', 'sync', 'parallel'].reduce((rOpts: RecipeOptions, key: string) => {
     if (key in input) {
       (rOpts as any)[key] = (input as any)[key];
     }
