@@ -33,10 +33,14 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
     return;
   }
 
+  collectRecipeHooks(recipe);
+
   const source = await fetchSource(recipe.from, { subdirs: recipe.includeDirs, cache: options?.cache });
   if (recipe.type == 'repo' || recipe.type == 'remote') {
     sourceDirs.push(source);
   }
+
+  await Promise.all(recipe.before?.map?.((callback) => callback(recipe)));
 
   const root = await tree(source, { exclude: recipe.excludeDirs });
 
@@ -49,6 +53,8 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
   await Promise.all(recipe.prerender?.map?.((callback) => callback(recipe, renderer)));
 
   await renderer.render();
+
+  await Promise.all(recipe.after?.map?.((callback) => callback(recipe)));
 };
 
 /**
@@ -66,13 +72,7 @@ export const runRecipes = async (recipes: Recipe[], handler: Handler, sourceDirs
 
   while (recipes.length) {
     const batch = recipes.splice(0, maxConcurrent).map(async (recipe) => {
-      collectRecipeHooks(recipe);
-
-      await Promise.all(recipe.before?.map?.((callback) => callback(recipe)));
-
       await runRecipe(recipe, handler, sourceDirs, options);
-
-      await Promise.all(recipe.after?.map?.((callback) => callback(recipe)));
 
       if (recipe.recipes?.length) {
         recipes.push(...recipe.recipes);
