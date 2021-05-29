@@ -1,6 +1,5 @@
 {
   "from": "https://github.com/acrontum/generate-it-typescript-server",
   "to": "out",
-  "prerender":["fstr-files"],
-  "postrender":[]
+  "hooks": ["fstr-files"]
 }

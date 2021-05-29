@@ -1,6 +1,7 @@
 import { promises } from 'fs';
 import { basename, relative } from 'path';
 import { FNode } from './fnode';
+import { LoggingService } from './log.service';
 
 export type Handler = (node: FNode) => Promise<any>;
 
@@ -14,6 +15,8 @@ export interface RenderOptions {
    */
   recursive?: boolean;
 }
+
+const logger = new LoggingService('renderer');
 
 /**
  * This class describes a renderer.
@@ -40,7 +43,8 @@ export class Renderer {
    * @param {Handler}  templater  The templater
    */
   registerFilenameHandler(ext: string, templater: Handler) {
-    this.templaters[ext] = [].concat(this.handlers[ext], templater);
+    this.templaters[ext] = (this.templaters[ext] || []).concat(templater);
+    logger.debug(`registered templater for ${ext}`);
   }
 
   /**
@@ -50,7 +54,8 @@ export class Renderer {
    * @param {Handler}  handler  The handler
    */
   registerKeyHandler(key: string, handler: Handler) {
-    this.handlers[key] = [].concat(this.handlers[key], handler);
+    this.handlers[key] = (this.handlers[key] || []).concat(handler);
+    logger.debug(`registered handler for ${key}`);
   }
 
   /**

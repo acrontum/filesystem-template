@@ -1,6 +1,5 @@
 {
   "from": "trees/less-simple",
   "to": "out",
-  "prerender":["fstr-files"],
-  "postrender":[]
+  "hooks": ["fstr-files"]
 }

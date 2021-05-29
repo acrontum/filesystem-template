@@ -1,6 +1,6 @@
 const { promises } = require('fs');
 
-exports.default = (_recipe, renderer) => {
+exports.prerender = (_recipe, renderer) => {
   renderer.registerFilenameHandler('.njk', async (node) => {
     await Promise.all(
       node.outputs.map(async (outputPath) => {

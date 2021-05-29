@@ -111,7 +111,7 @@ export class LoggingService {
    * @return {string}  { description_of_the_return_value }
    */
   blu(s: string): string {
-    return `\x1b[34m${s}\x1b[0;0m`;
+    return `\x1b[36m${s}\x1b[0;0m`;
   }
 
   /**

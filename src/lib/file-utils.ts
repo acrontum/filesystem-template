@@ -14,10 +14,6 @@ export interface SourceOptions {
   root?: string;
   subdirs?: string[];
   cache?: boolean;
-  /**
-   * override double log
-   */
-  silence?: boolean;
 }
 
 export interface TreeOptions {
@@ -32,15 +28,14 @@ export interface Group {
 export interface CacheInfo {
   branch?: string;
   origin: string;
-  repo: string;
+  path: string;
   repoName: string;
 }
 
 const logger = new LoggingService('file-utils');
 const exec = promisify(execCb);
-
-// hoisted - only find it once per run
-export let packagePath: string;
+const sourceCache: Record<string, Promise<string>> = {};
+let packagePath: string;
 
 /**
  * { function_description }
@@ -165,31 +160,56 @@ export const fetchSource = async (pathlike: string, options?: SourceOptions): Pr
     throw new Error(`No such file: ${pathlike}`);
   }
 
-  if (isRecipeFile(url.pathname)) {
-    return fetchRecipe(url, options);
+  const cache = getCacheDir(url);
+  if (!sourceCache[cache?.path]) {
+    sourceCache[cache?.path] = isRecipeFile(url.pathname) ? fetchRecipe(url, cache, options) : fetchRepo(url, cache, options);
   } else {
-    return fetchRepo(url, options);
+    logger.log(`cache hit on ${cache?.path}`);
   }
+
+  return sourceCache[cache?.path];
+};
+
+/**
+ * Gets the cache dir.
+ *
+ * @param  {URL}        url  The url
+ *
+ * @return {CacheInfo}  The cache dir.
+ */
+export const getCacheDir = (url: URL): CacheInfo => {
+  const projectDir = getProjectRoot();
+
+  if (isRecipeFile(url.pathname)) {
+    const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
+
+    return { path: join(projectDir, filename), origin: null, repoName: null };
+  }
+
+  let branch = url?.hash?.slice?.(1);
+  const repoName = `.fst/remote/${url.pathname.slice(1) || url.hostname}`;
+  const repo = join(projectDir, repoName);
+  const origin = url.href.replace(url.hash, '').replace(url.search, '');
+
+  return { path: repo, origin, repoName, branch };
 };
 
 /**
  * Fetches a recipe.
  *
  * @param  {URL}              url                     The url
+ * @param  {CacheInfo}        cacheInfo               The cache information
  * @param  {}                 options?:SourceOptions  The options source options
  *
  * @return {Promise<string>}  The recipe.
  */
-export const fetchRecipe = async (url: URL, options?: SourceOptions): Promise<string> => {
-  const projectDir = getProjectRoot();
+export const fetchRecipe = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
+  const output = cacheInfo.path;
 
-  const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
-  const output = join(projectDir, filename);
+  if (options?.cache && existsSync(output)) {
+    logger.info(`will copy ${logger.grn(output)} (cached)`);
 
-  if (options?.cache && existsSync(filename)) {
-    logger.info(`will copy ${logger.grn(filename)} (cached)`);
-
-    return filename;
+    return output;
   }
 
   const file = await new Promise<string>((resolve, reject) => {
@@ -209,40 +229,21 @@ export const fetchRecipe = async (url: URL, options?: SourceOptions): Promise<st
 };
 
 /**
- * Gets the cache dir.
- *
- * @param  {URL}        url  The url
- *
- * @return {CacheInfo}  The cache dir.
- */
-export const getCacheDir = (url: URL): CacheInfo => {
-  const projectDir = getProjectRoot();
-
-  let branch = url?.hash?.slice?.(1);
-  const repoName = `.fst/remote/${url.pathname.slice(1) || url.hostname}`;
-  const repo = join(projectDir, repoName);
-  const origin = url.href.replace(url.hash, '').replace(url.search, '');
-
-  return { repo, origin, repoName, branch };
-};
-
-/**
  * Fetches a repo.
  *
  * @param  {URL}              url                     The url
+ * @param  {CacheInfo}        cacheInfo               The cache information
  * @param  {}                 options?:SourceOptions  The options source options
  *
  * @return {Promise<string>}  The repo.
  */
-export const fetchRepo = async (url: URL, options?: SourceOptions): Promise<string> => {
-  const cacheInfo = getCacheDir(url);
+export const fetchRepo = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
   let branch = cacheInfo.branch;
-  const { repo, origin, repoName } = cacheInfo;
+  const { path: repo, origin, repoName } = cacheInfo;
 
   if (options?.cache && existsSync(repo)) {
-    if (options?.silence) {
-      logger.info(`will copy ${logger.grn(repoName)} (cached)`);
-    }
+    logger.info(`will copy repo ${logger.grn(repoName)} (cached)`);
+
     return repo;
   }
 

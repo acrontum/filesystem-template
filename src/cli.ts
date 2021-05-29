@@ -12,6 +12,7 @@ export interface RecipeOptions {
   exclude?: string[];
   imports?: string[];
   cache?: boolean;
+  parallel?: number;
 }
 
 export interface CliOptions extends RecipeOptions {
@@ -27,19 +28,20 @@ options
   -r, --recipe URI     Add recipe to builder (file or URL)
 
 these options apply to all recipe files
-  -R, --recursive      Recursively seach for recipes
-  -I, --imports PATH   pattern? File or folder to add to builder (can be called multiple times)
-  -i, --include PATH   pattern?
-  -e, --exclude PATH   pattern?
-  -o, --output PATH    Path to output files
   -c, --cache          Use local copies of repos when possible
   -C, --no-cache       Override cache fetching
-  -v, --verbose        Log more verbosely
+  -e, --exclude PATH   pattern?
+  -I, --imports PATH   pattern? File or folder to add to builder (can be called multiple times)
+  -i, --include PATH   pattern?
+  -p, --parallel NUM   Limit number of concurrent recipe parsing
+  -o, --output PATH    Path to output files
+  -R, --recursive      Recursively seach for recipes
   -s, --silent         Log less verbosely
+  -v, --verbose        Log more verbosely
 `;
 
 const booleans = ['h', 'help', 'R', 'recursive', 'c', 'cache', 'C', 'no-cache', 'S', 'sync'];
-const strings = ['recipe', 'r', 'I', 'imports', 'i', 'include', 'e', 'exclude', 'o', 'output', 'v', 'verbose', 's', 'silent'];
+const strings = ['recipe', 'r', 'I', 'imports', 'i', 'include', 'e', 'exclude', 'o', 'output', 'v', 'verbose', 's', 'silent', 'p', 'parallel'];
 const alias: Record<string, string> = { r: '_', recipe: '_' };
 const args = booleans.concat(strings);
 
@@ -70,7 +72,9 @@ const cliToRecipe = (input: CliOptions): RecipeOptions => {
  */
 export const cli = async () => {
   const options = minimist<CliOptions>(process.argv.slice(2), {
-    default: {},
+    default: {
+      parallel: 10,
+    },
     unknown(opt, _ctx) {
       if (!/^-/.test(opt)) {
         return true;
@@ -105,11 +109,20 @@ export const cli = async () => {
     options.cache = false;
   }
 
-  logger.debug(options);
+  if (options.parallel) {
+    const parallel = parseInt(`${options.parallel}`, 10);
+    if (Number.isNaN(parallel) || !/^[0-9]+$/.test(`${options.parallel}`) || parallel < 1) {
+      logger.error(`parallel must be a number greater than 0, received ${options.parallel}`);
+      process.exit(1);
+    }
+    options.parallel = parallel;
+  }
+
+  logger.debug({ options });
 
   await fst(options._, cliToRecipe(options));
 };
 
 if (require.main === module) {
-  cli().catch(e => logger.error(e));
+  cli().catch((e) => logger.error(e));
 }
