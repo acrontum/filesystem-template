@@ -26,10 +26,10 @@ export interface Group {
 }
 
 export interface CacheInfo {
-  branch?: string;
-  origin: string;
   path: string;
-  repoName: string;
+  branch?: string;
+  origin?: string;
+  repoName?: string;
 }
 
 const logger = new LoggingService('file-utils');
@@ -183,7 +183,7 @@ export const getCacheDir = (url: URL): CacheInfo => {
   if (isRecipeFile(url.pathname)) {
     const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
 
-    return { path: join(projectDir, filename), origin: null, repoName: null };
+    return { path: join(projectDir, filename) };
   }
 
   let branch = url?.hash?.slice?.(1);
