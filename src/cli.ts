@@ -33,7 +33,7 @@ these options apply to all recipe files
   -e, --exclude PATH   pattern?
   -I, --imports PATH   pattern? File or folder to add to builder (can be called multiple times)
   -i, --include PATH   pattern?
-  -p, --parallel NUM   Limit number of concurrent recipe parsing
+  -p, --parallel NUM   Max number of concurrent recipe parsing (default 10)
   -o, --output PATH    Path to output files
   -R, --recursive      Recursively seach for recipes
   -s, --silent         Log less verbosely
