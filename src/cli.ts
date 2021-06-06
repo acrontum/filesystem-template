@@ -80,7 +80,7 @@ export const cli = async () => {
         return true;
       }
 
-      logger.error(`unknown option '${opt}'\n\n${usage}`);
+      console.error(`unknown option '${opt}'\n\n${usage}`);
       process.exit(1);
     },
     boolean: booleans,
@@ -89,13 +89,13 @@ export const cli = async () => {
   });
 
   if (options.help) {
-    logger.log(usage);
+    console.log(usage);
     process.exit(0);
   }
 
   if (!options._?.length) {
-    logger.error('at least one recipe or uri is required\n');
-    logger.error(usage);
+    console.error('at least one recipe or uri is required\n');
+    console.error(usage);
     process.exit(1);
   }
 
@@ -112,7 +112,7 @@ export const cli = async () => {
   if (options.parallel) {
     const parallel = parseInt(`${options.parallel}`, 10);
     if (Number.isNaN(parallel) || !/^[0-9]+$/.test(`${options.parallel}`) || parallel < 1) {
-      logger.error(`parallel must be a number greater than 0, received ${options.parallel}`);
+      console.error(`parallel must be a number greater than 0, received ${options.parallel}`);
       process.exit(1);
     }
     options.parallel = parallel;
@@ -124,5 +124,5 @@ export const cli = async () => {
 };
 
 if (require.main === module) {
-  cli().catch((e) => logger.error(e));
+  cli().catch((e) => console.error(e));
 }
