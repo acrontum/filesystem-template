@@ -66,6 +66,11 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
   const root = resolve(recipe.sourcePath || '.');
   const to = join(root, recipe?.to || '.');
 
+  // parse git as ssh url
+  if (/^git@.*:/.test(recipe.from)) {
+    recipe.from = `ssh://${recipe.from.replace(/:/, '/')}`;
+  }
+
   let output: Recipe = {
     from: recipe.from ? join(root, recipe.from) : null,
     to,
