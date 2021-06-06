@@ -278,7 +278,7 @@ export const fetchRepo = async (url: URL, cacheInfo: CacheInfo, options?: Source
 
     return repo;
   } catch (e) {
-    await promises.rmdir(repo).catch(() => null);
+    await promises.rmdir(repo, { recursive: true, force: true } as any).catch(() => null);
     throw e;
   }
 };
