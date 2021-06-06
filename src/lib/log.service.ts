@@ -1,6 +1,7 @@
 export const LogLevels = {
   none: 0,
   error: 1,
+  trace: 1,
   warn: 2,
   info: 3,
   log: 4,
@@ -56,6 +57,15 @@ export class LoggingService {
    *
    * @param {any}  args  The arguments
    */
+  trace(...args: any): void {
+    return this.bindLog('trace').apply(console, args);
+  }
+
+  /**
+   * { function_description }
+   *
+   * @param {any}  args  The arguments
+   */
   debug(...args: any): void {
     return this.bindLog('debug').apply(console, args);
   }
@@ -101,7 +111,7 @@ export class LoggingService {
    * @return {string}  { description_of_the_return_value }
    */
   blu(s: string): string {
-    return `\x1b[34m${s}\x1b[0;0m`;
+    return `\x1b[36m${s}\x1b[0;0m`;
   }
 
   /**

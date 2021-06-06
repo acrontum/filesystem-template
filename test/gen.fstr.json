@@ -1,0 +1,5 @@
+{
+  "from": "https://github.com/acrontum/generate-it-typescript-server",
+  "to": "out",
+  "hooks": ["fstr-files"]
+}

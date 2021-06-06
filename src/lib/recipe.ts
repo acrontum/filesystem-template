@@ -1,7 +1,10 @@
+import { fdir } from 'fdir';
+import { lstatSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { URL } from 'url';
 import { CliOptions } from '../cli';
 import { LoggingService } from './log.service';
+import { Renderer } from './renderer';
 
 const logger = new LoggingService('recipe');
 
@@ -18,8 +21,12 @@ export interface Recipe {
   recursive?: boolean;
   includeDirs?: string[];
   excludeDirs?: string[];
-  imports?: string[];
+  hooks?: string[];
   sourcePath?: string;
+  meta?: any;
+  before?: ((recipe: Recipe) => void | Promise<void>)[];
+  prerender?: ((recipe: Recipe, renderer: Renderer) => void | Promise<void>)[];
+  after?: ((recipe: Recipe) => void | Promise<void>)[];
 }
 
 /**
@@ -32,6 +39,21 @@ export interface Recipe {
 export const isRecipeFile = (file: string): boolean => /\.fstr\.js(on)?/.test(file);
 
 /**
+ * Collect javascript files from a folder
+ *
+ * @param  {string}    fileOrFolder  The file or folder
+ *
+ * @return {string[]}  An array of full paths
+ */
+export const collectScriptFiles = (fileOrFolder: string): string[] => {
+  if (lstatSync(fileOrFolder).isDirectory()) {
+    return new fdir().crawlWithOptions(fileOrFolder, { includeBasePath: true, filters: [(p) => p.endsWith('.js')] }).sync() as string[];
+  }
+
+  return fileOrFolder.endsWith('.js') ? [fileOrFolder] : [];
+};
+
+/**
  * { function_description }
  *
  * @param  {Recipe}  recipe  The recipe
@@ -39,28 +61,37 @@ export const isRecipeFile = (file: string): boolean => /\.fstr\.js(on)?/.test(fi
  * @return {Recipe}  { description_of_the_return_value }
  */
 export const resolveRecipePaths = (recipe: Recipe): Recipe => {
-  logger.log('resolveRecipePaths input', JSON.stringify({ recipe }, null, 2));
+  logger.debug('resolveRecipePaths input', JSON.stringify({ recipe }, null, 2));
 
   const root = resolve(recipe.sourcePath || '.');
   const to = join(root, recipe?.to || '.');
+
+  // parse git as ssh url
+  if (/^git@.*:/.test(recipe.from)) {
+    recipe.from = `ssh://${recipe.from.replace(/:/, '/')}`;
+  }
+
+  if (typeof recipe.hooks === 'string') {
+    recipe.hooks = [recipe.hooks];
+  }
 
   let output: Recipe = {
     from: recipe.from ? join(root, recipe.from) : null,
     to,
     type: recipe.from ? 'disk' : 'stub',
+    hooks: recipe.hooks?.map?.((iPath) => join(root, iPath)),
   };
+
+  output.hooks = output.hooks?.reduce?.((files, path) => files.concat(collectScriptFiles(path)), []);
 
   try {
     const url = new URL(recipe.from);
 
-    output = {
-      from: recipe.from,
-      to,
-      type: /\.fstr\.js(on)?$/.test(url.pathname) ? 'remote' : 'repo',
-    };
+    output.from = recipe.from;
+    output.type = /\.fstr\.js(on)?$/.test(url.pathname) ? 'remote' : 'repo';
   } catch (e) {}
 
-  logger.log('resolveRecipePaths output', output);
+  logger.debug('resolveRecipePaths', logger.ylw(JSON.stringify({ recipe, output }, null, 2)));
 
   return output;
 };
@@ -151,4 +182,32 @@ export const parseRecipeFile = (schemaLike: string | RecipeSchema, options?: Cli
   }
 
   return recipes;
+};
+
+/**
+ * Import and parse hooks
+ *
+ * @param {Recipe}  recipe  The recipe
+ */
+export const collectRecipeHooks = (recipe: Recipe): void => {
+  recipe.before = recipe.before || [];
+  recipe.prerender = recipe.prerender || [];
+  recipe.after = recipe.after || [];
+
+  if (!recipe.hooks?.length) {
+    return;
+  }
+
+  for (const file of recipe.hooks) {
+    const imported = require(file) as Pick<Recipe, 'before' | 'prerender' | 'after'>;
+    if (typeof imported.before === 'function') {
+      recipe.before.push(imported.before);
+    }
+    if (typeof imported.prerender === 'function') {
+      recipe.prerender.push(imported.prerender);
+    }
+    if (typeof imported.after === 'function') {
+      recipe.after.push(imported.after);
+    }
+  }
 };

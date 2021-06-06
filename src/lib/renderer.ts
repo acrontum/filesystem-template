@@ -1,6 +1,7 @@
-import { basename, relative } from 'path';
 import { promises } from 'fs';
+import { basename, relative } from 'path';
 import { FNode } from './fnode';
+import { LoggingService } from './log.service';
 
 export type Handler = (node: FNode) => Promise<any>;
 
@@ -15,14 +16,16 @@ export interface RenderOptions {
   recursive?: boolean;
 }
 
+const logger = new LoggingService('renderer');
+
 /**
  * This class describes a renderer.
  *
  * @class Renderer (name)
  */
 export class Renderer {
-  handlers: Record<string, Handler> = {};
-  templaters: Record<string, Handler> = {};
+  handlers: Record<string, Handler[]> = {};
+  templaters: Record<string, Handler[]> = {};
   dest: string;
   root: FNode;
 
@@ -39,8 +42,9 @@ export class Renderer {
    * @param {string}   ext        The extent
    * @param {Handler}  templater  The templater
    */
-  registerTemplater(ext: string, templater: Handler) {
-    this.templaters[ext] = templater;
+  registerFilenameHandler(ext: string, templater: Handler) {
+    this.templaters[ext] = (this.templaters[ext] || []).concat(templater);
+    logger.debug(`registered templater for ${ext}`);
   }
 
   /**
@@ -49,8 +53,9 @@ export class Renderer {
    * @param {string}   key      The key
    * @param {Handler}  handler  The handler
    */
-  registerHandler(key: string, handler: Handler) {
-    this.handlers[key] = handler;
+  registerKeyHandler(key: string, handler: Handler) {
+    this.handlers[key] = (this.handlers[key] || []).concat(handler);
+    logger.debug(`registered handler for ${key}`);
   }
 
   /**
@@ -70,17 +75,23 @@ export class Renderer {
         await promises.rmdir(this.dest, { recursive: true });
       }
     }
-    const handler = this.handlers[node.action];
-    const engine = this.templaters[node.ext];
+    const handlers = this.handlers[node.action];
 
-    if (handler) {
-      await handler(node);
+    if (handlers?.length) {
+      for (const handler of handlers) {
+        await handler(node);
+      }
     } else {
       await node.generate();
     }
 
-    if (engine) {
-      await engine(node);
+    if (!node.isDir) {
+      const engines = node.exts.reduce((exts, ext) => exts.concat([...(this.templaters[ext] || [])]), []);
+      if (engines?.length) {
+        for (const engine of engines) {
+          await engine(node);
+        }
+      }
     }
 
     node.resolve();
@@ -93,11 +104,11 @@ export class Renderer {
    * { function_description }
    */
   private registerDefaultHandlers(): void {
-    this.registerHandler('each', (node) => {
+    this.registerKeyHandler('each', (node) => {
       return Promise.all(node.args?.values?.map?.((v: string) => node.generate(v)));
     });
 
-    this.registerHandler('dirname', (node) => {
+    this.registerKeyHandler('dirname', (node) => {
       return node.generate((prev) => node.name.replace('{dirname}', basename(prev)));
     });
   }
