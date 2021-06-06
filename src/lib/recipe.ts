@@ -71,6 +71,10 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
     recipe.from = `ssh://${recipe.from.replace(/:/, '/')}`;
   }
 
+  if (typeof recipe.hooks === 'string') {
+    recipe.hooks = [recipe.hooks];
+  }
+
   let output: Recipe = {
     from: recipe.from ? join(root, recipe.from) : null,
     to,
