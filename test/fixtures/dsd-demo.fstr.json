@@ -1,0 +1,48 @@
+{
+  "name": "dsd-demo",
+  "to": "./generated",
+  "recipes": [
+    {
+      "name": "swagger",
+      "from": "git@repos.acrontum.net:dsd/backend_main_swagger",
+      "to": "backend_main_swagger",
+      "scripts": {
+        "after": "npm i && npm run build:yaml -- --yes"
+      },
+      "recipes": [
+        {
+          "name": "backend",
+          "from": "git@repos.acrontum.net:dsd/backend_main",
+          "to": "../backend",
+          "scripts": {
+            "after": "npm i && npm run generate:nodegen -- --yes",
+            "before": "node -e \"process.stderr.write(path.resolve('../../fstr-scripts/backend-prerender.js') + '\\n')\""
+          }
+        },
+        {
+          "name": "frontend",
+          "from": "git@repos.acrontum.net:dsd/frontend",
+          "to": "../frontend",
+          "recipes": [
+            {
+              "from": "git@repos.acrontum.net:dsd/authentication_swagger",
+              "to": "swagger_auth"
+            },
+            {
+              "from": "git@repos.acrontum.net:dsd/car-park-backend-swagger",
+              "to": "swagger_carpark"
+            },
+            {
+              "from": "../backend_main_swagger",
+              "to": "swagger_main"
+            },
+            {
+              "from": "git@repos.acrontum.net:dsd/recommendations-service-swagger.git",
+              "to": "swagger_recommendations"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

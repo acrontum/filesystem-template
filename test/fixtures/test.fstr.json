@@ -1,0 +1,7 @@
+{
+  "from": "trees/less-simple",
+  "to": "out",
+  "scripts": {
+    "prerender": "fstr-files/njkHandler.js"
+  }
+}

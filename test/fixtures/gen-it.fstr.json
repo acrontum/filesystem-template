@@ -1,0 +1,8 @@
+{
+  "name": "generate-it-typescript-server",
+  "from": "https://github.com/acr-lfr/generate-it-typescript-server",
+  "to": "generated/gen-it",
+  "scripts": {
+    "after": "./scripts/gen-shim.js"
+  }
+}

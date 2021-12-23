@@ -1,0 +1,16 @@
+{
+  "name": "fixtures",
+  "version": "1.0.0",
+  "description": "",
+  "main": "prerender.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "generate-it": "^5.36.0",
+    "swagger2openapi": "^7.0.8"
+  }
+}

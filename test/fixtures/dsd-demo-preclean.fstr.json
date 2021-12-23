@@ -1,0 +1,9 @@
+{
+  "name": "pregen",
+  "scripts": {
+    "before": "rm -rf generated && echo 'before done' >&2"
+  },
+  "recipes": [
+    "./dsd-demo.fstr.json"
+  ]
+}

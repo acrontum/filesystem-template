@@ -1,0 +1,23 @@
+{
+  "name": "johns fun house",
+  "to": "generated/johns-fun-house",
+  "recipes": [
+    {
+      "from": "../templates/",
+      "to": "./templates/",
+      "recursive": true
+    },
+    {
+      "from": "https://github.com/acrontum/openapi-nodegen-typescript-server-client.git",
+      "to": "modules/channel/"
+    },
+    {
+      "from": "https://github.com/acrontum/openapi-nodegen-typescript-server-client.git",
+      "to": "modules/image-write"
+    },
+    {
+      "from": "https://github.com/acrontum/generate-it-asyncapi-rabbitmq-fanout.git",
+      "to": "modules/events"
+    }
+  ]
+}

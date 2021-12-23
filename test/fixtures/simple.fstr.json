@@ -1,0 +1,23 @@
+{
+  "recipes": [
+    {
+      "name": "server",
+      "from": "../templates/server",
+      "to": "../../out/simple/src/server",
+      "recursive": false,
+      "recipes": [
+        {
+          "name": "async",
+          "from": "https://github.com/acrontum/generate-it-asyncapi-models-to-json",
+          "to": "src/async",
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "from": "../../filesystem-template",
+      "to": "../out/simple/src/fst-test",
+      "excludeDirs": ["dist", "test"]
+    }
+  ]
+}
