@@ -28,8 +28,7 @@ export interface Recipe {
   meta?: any;
 }
 
-export const rootOrRelative = (path: string, root?: string): string =>
-  /^\//.test(path) ? path : join(root, path || '.');
+export const rootOrRelative = (path: string, root?: string): string => (/^\//.test(path) ? path : join(root, path || '.'));
 
 /**
  * Determines whether the specified file is recipe file.
