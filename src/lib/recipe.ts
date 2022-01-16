@@ -1,10 +1,8 @@
-import { fdir } from 'fdir';
-import { lstatSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { URL } from 'url';
 import { CliOptions } from '../cli';
 import { LoggingService } from './log.service';
-import { Renderer } from './renderer';
 
 const logger = new LoggingService('recipe');
 
@@ -21,13 +19,17 @@ export interface Recipe {
   recursive?: boolean;
   includeDirs?: string[];
   excludeDirs?: string[];
-  hooks?: string[];
+  scripts?: {
+    before?: string;
+    after?: string;
+    prerender?: string;
+  };
   sourcePath?: string;
   meta?: any;
-  before?: ((recipe: Recipe) => void | Promise<void>)[];
-  prerender?: ((recipe: Recipe, renderer: Renderer) => void | Promise<void>)[];
-  after?: ((recipe: Recipe) => void | Promise<void>)[];
 }
+
+export const rootOrRelative = (path: string, root?: string): string =>
+  /^\//.test(path) ? path : join(root, path || '.');
 
 /**
  * Determines whether the specified file is recipe file.
@@ -37,21 +39,6 @@ export interface Recipe {
  * @return {boolean}  True if the specified file is recipe file, False otherwise.
  */
 export const isRecipeFile = (file: string): boolean => /\.fstr\.js(on)?/.test(file);
-
-/**
- * Collect javascript files from a folder
- *
- * @param  {string}    fileOrFolder  The file or folder
- *
- * @return {string[]}  An array of full paths
- */
-export const collectScriptFiles = (fileOrFolder: string): string[] => {
-  if (lstatSync(fileOrFolder).isDirectory()) {
-    return new fdir().crawlWithOptions(fileOrFolder, { includeBasePath: true, filters: [(p) => p.endsWith('.js')] }).sync() as string[];
-  }
-
-  return fileOrFolder.endsWith('.js') ? [fileOrFolder] : [];
-};
 
 /**
  * { function_description }
@@ -64,25 +51,18 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
   logger.debug('resolveRecipePaths input', JSON.stringify({ recipe }, null, 2));
 
   const root = resolve(recipe.sourcePath || '.');
-  const to = join(root, recipe?.to || '.');
+  const to = rootOrRelative(recipe?.to, root);
 
   // parse git as ssh url
   if (/^git@.*:/.test(recipe.from)) {
     recipe.from = `ssh://${recipe.from.replace(/:/, '/')}`;
   }
 
-  if (typeof recipe.hooks === 'string') {
-    recipe.hooks = [recipe.hooks];
-  }
-
   let output: Recipe = {
-    from: recipe.from ? join(root, recipe.from) : null,
+    from: recipe.from ? rootOrRelative(recipe.from, root) : null,
     to,
     type: recipe.from ? 'disk' : 'stub',
-    hooks: recipe.hooks?.map?.((iPath) => join(root, iPath)),
   };
-
-  output.hooks = output.hooks?.reduce?.((files, path) => files.concat(collectScriptFiles(path)), []);
 
   try {
     const url = new URL(recipe.from);
@@ -96,6 +76,19 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
   return output;
 };
 
+const tryResolveRecipeFile = (filePath: string, recipe?: RecipeInput): RecipeInput => {
+  let schema: RecipeInput = null;
+
+  if (!existsSync(filePath) && recipe) {
+    filePath = join((recipe as Recipe).sourcePath || recipe.to, filePath);
+  }
+
+  schema = require(resolve(filePath));
+  schema.sourcePath = resolve(dirname(filePath));
+
+  return schema;
+};
+
 /**
  * Gets the schema.
  *
@@ -103,18 +96,15 @@ export const resolveRecipePaths = (recipe: Recipe): Recipe => {
  *
  * @return {RecipeSchema}           The schema.
  */
-const getSchema = (schemaLike: string | RecipeSchema): RecipeSchema => {
+export const getSchema = (schemaLike: string | RecipeSchema): RecipeSchema => {
   if (typeof schemaLike == 'string') {
     if (!isRecipeFile(schemaLike)) {
       return { from: schemaLike };
     }
 
     try {
-      let schema: RecipeSchema = require(resolve(schemaLike));
-      (schema as Recipe).sourcePath = resolve(dirname(schemaLike));
-
-      return schema;
-    } catch (e) {
+      return tryResolveRecipeFile(schemaLike);
+    } catch (e: any) {
       if (e?.code !== 'MODULE_NOT_FOUND') {
         throw e;
       }
@@ -123,11 +113,8 @@ const getSchema = (schemaLike: string | RecipeSchema): RecipeSchema => {
     return { from: schemaLike };
   } else if (!Array.isArray(schemaLike) && isRecipeFile(schemaLike?.from)) {
     try {
-      let schema: RecipeSchema = require(resolve(schemaLike.from));
-      (schema as Recipe).sourcePath = resolve(dirname(schemaLike.from));
-
-      return schema;
-    } catch (e) {
+      return tryResolveRecipeFile(schemaLike.from, schemaLike);
+    } catch (e: any) {
       if (e?.code !== 'MODULE_NOT_FOUND') {
         throw e;
       }
@@ -164,10 +151,14 @@ export const parseRecipeFile = (schemaLike: string | RecipeSchema, options?: Cli
     const item: Recipe = schema.shift();
     logger.debug('parseRecipeFile item', item);
 
+    if (item.scripts?.prerender && !/^\//.test(item.scripts.prerender)) {
+      item.scripts.prerender = join(item.to, item.scripts.prerender);
+    }
+
     const recipe = {
       ...item,
       ...resolveRecipePaths(item),
-      ...(options || {}),
+      ...options,
     };
 
     logger.debug('parseRecipeFile recipe', recipe);
@@ -175,39 +166,13 @@ export const parseRecipeFile = (schemaLike: string | RecipeSchema, options?: Cli
 
     if (recipe.recipes?.length) {
       recipe.recipes = recipe.recipes.reduce((deps, dep) => {
+        dep = typeof dep === 'string' ? { from: dep } : dep;
         dep.sourcePath = dep.sourcePath || recipe.to;
-        return deps.concat(parseRecipeFile(getSchema(dep), options));
+
+        return deps.concat(parseRecipeFile(dep, options));
       }, []);
     }
   }
 
   return recipes;
-};
-
-/**
- * Import and parse hooks
- *
- * @param {Recipe}  recipe  The recipe
- */
-export const collectRecipeHooks = (recipe: Recipe): void => {
-  recipe.before = recipe.before || [];
-  recipe.prerender = recipe.prerender || [];
-  recipe.after = recipe.after || [];
-
-  if (!recipe.hooks?.length) {
-    return;
-  }
-
-  for (const file of recipe.hooks) {
-    const imported = require(file) as Pick<Recipe, 'before' | 'prerender' | 'after'>;
-    if (typeof imported.before === 'function') {
-      recipe.before.push(imported.before);
-    }
-    if (typeof imported.prerender === 'function') {
-      recipe.prerender.push(imported.prerender);
-    }
-    if (typeof imported.after === 'function') {
-      recipe.after.push(imported.after);
-    }
-  }
 };

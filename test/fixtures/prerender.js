@@ -26,22 +26,25 @@ const path_1 = require("path");
 const config = {
     verbose: false,
     veryVerbose: false,
-    swaggerFilePath: '/home/pat/source/acrontum/github/fstr/examples/templates/server/api.json',
-    targetDir: './out',
+    swaggerFilePath: './test/fixtures/api.json',
+    targetDir: './test-output',
     template: 'egal',
     mockServer: false,
     dontUpdateTplCache: true,
     dontRunComparisonTool: true,
 };
 const camelCase = (input) => input.replace(/([0-9].)|[^a-zA-Z0-9]+(.)?/g, (_, s = '', q = '', i) => (i ? (s || q).toUpperCase() : s || q));
+const pascalCase = (input) => {
+    const camel = camelCase(input);
+    return camel.charAt(0).toUpperCase() + camel.slice(1);
+};
 const openapiFiles = (config) => {
-    void [openapiFiles];
     const files = {};
-    for (const [fullPath, pathProperties] of Object.entries(config.swagger.paths)) {
+    const ops = Object.entries(config.swagger.paths);
+    for (const [fullPath, pathProperties] of ops) {
         const groupName = pathProperties.groupName;
-        files[groupName] = files[groupName] || [];
         const colonVarPath = fullPath.replace(/}/g, '').replace(/{/g, ':');
-        files[groupName].push({
+        files[groupName] = (files[groupName] || []).concat({
             responses: {},
             path_name: colonVarPath,
             path: pathProperties,
@@ -55,12 +58,10 @@ const openapiFiles = (config) => {
     return tplVars;
 };
 const oa2ToOa3 = (filePath) => new Promise((resolve, reject) => {
-    swagger2openapi.convertFile(filePath, {}, (err, opts) => {
-        return err ? reject(err) : resolve(opts);
-    });
+    swagger2openapi.convertFile(filePath, {}, (err, opts) => (err ? reject(err) : resolve(opts)));
 });
 void [oa2ToOa3];
-let mapped;
+let mapped = null;
 const gen = () => __awaiter(void 0, void 0, void 0, function* () {
     if (mapped) {
         return mapped;
@@ -69,8 +70,43 @@ const gen = () => __awaiter(void 0, void 0, void 0, function* () {
     OpenAPIBundler_1.default.copyInputFileToProject = () => null;
     extendedConfig.swagger = yield OpenAPIBundler_1.default.bundle(config.swaggerFilePath, extendedConfig);
     mapped = openapiFiles(extendedConfig);
+    fs_1.promises.writeFile('/tmp/swag.json', JSON.stringify(mapped, null, 2));
     return mapped;
 });
+const helpers = {
+    pathMethodsHaveAttr(ops, ...parts) {
+        const merged = parts.reduce((a, p) => a.concat(p.split('.')), []);
+        let result = ops.reduce((a, o) => a.concat(Object.values(o.path)), []);
+        while (merged.length) {
+            const next = merged.shift();
+            if (Array.isArray(result)) {
+                result = result.reduce((a, r) => (typeof r === 'object' && next in r ? a.concat(r[next]) : a), []);
+            }
+            else {
+                result = result === null || result === void 0 ? void 0 : result[next];
+            }
+            if (typeof result === 'undefined' || (result === null || result === void 0 ? void 0 : result.length) === 0) {
+                return false;
+            }
+        }
+        return !!result;
+    },
+    importInterfaces() {
+        return ['asdf'];
+    },
+    ucFirst: pascalCase,
+    isValidMethod(method) {
+        void [method];
+        return true;
+    },
+    getSecurityNames() {
+        return '';
+    },
+    getSingleSuccessResponse(responses) {
+        const codes = Object.keys(responses).filter(code => /^2[0-9]+$/.test(code));
+        return (codes === null || codes === void 0 ? void 0 : codes.length) === 1 ? parseInt(codes[0], 10) : undefined;
+    },
+};
 const render = (recipe, renderer) => {
     void [recipe, renderer];
     renderer.registerFilenameHandler('___eval.ts', (node) => __awaiter(void 0, void 0, void 0, function* () {
@@ -84,20 +120,28 @@ const render = (recipe, renderer) => {
     renderer.registerFilenameHandler('___stub.ts.njk', (node) => __awaiter(void 0, void 0, void 0, function* () {
         const { root, parent } = node, rest = __rest(node, ["root", "parent"]);
         const outputs = node.getOutputs()[0];
-        void ([
-            outputs,
-            rest
-        ]);
+        void [outputs, rest];
     }), { stopPropagation: true });
     renderer.registerFilenameHandler('___mock.ts.njk', (node) => __awaiter(void 0, void 0, void 0, function* () {
         const outputs = node.getOutputs();
         const { root, parent } = node, rest = __rest(node, ["root", "parent"]);
-        void ([outputs.length > 1 ? outputs.join(' ') : outputs[0], rest]);
+        void [outputs.length > 1 ? outputs.join(' ') : outputs[0], rest];
     }), { stopPropagation: true });
     renderer.registerFilenameHandler('___op.ts.njk', (node) => __awaiter(void 0, void 0, void 0, function* () {
-        const outputs = node.getOutputs();
-        const { root, parent } = node, rest = __rest(node, ["root", "parent"]);
-        void ([outputs.length > 1 ? outputs.join(' ') : outputs[0], rest]);
+        const parentPath = node.parent.outputs[0];
+        const suffix = pascalCase((0, path_1.basename)(parentPath));
+        const outputs = [];
+        const _a = yield gen(), { config } = _a, opMap = __rest(_a, ["config"]);
+        for (let [name, operations] of Object.entries(opMap)) {
+            if (/interface/i.test(parentPath)) {
+                name = name.charAt(0).toUpperCase() + name.slice(1);
+            }
+            const res = require('nunjucks').render(node.realPath, Object.assign(Object.assign(Object.assign({}, config), helpers), { operations, operation_name: name }));
+            const outPath = (0, path_1.join)(parentPath, `${name}${suffix}.ts`);
+            yield fs_1.promises.writeFile(outPath, res);
+            outputs.push(outPath);
+        }
+        return outputs;
     }), { stopPropagation: true });
     renderer.registerFilenameHandler('___interface.ts.njk', (node) => __awaiter(void 0, void 0, void 0, function* () {
         const outdir = node.parent.outputs[0];
@@ -113,7 +157,6 @@ const render = (recipe, renderer) => {
     }), { stopPropagation: true });
     renderer.registerFilenameHandler('.njk', (node) => __awaiter(void 0, void 0, void 0, function* () {
         const output = node.getOutputs()[0].replace('.njk', '');
-        void ([`shouldnt have spetzle -> ${output}`]);
         const res = require('nunjucks').render(node.realPath, (yield gen()).config);
         yield fs_1.promises.writeFile(output, res);
         return [output];

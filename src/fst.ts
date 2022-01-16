@@ -1,6 +1,7 @@
+import { exec, ExecOptions } from 'child_process';
 import { promises } from 'fs';
 import { CliOptions } from './cli';
-import { collectRecipeHooks, fetchSource, FNode, Handler, LoggingService, parseRecipeFile, Recipe, Renderer, SourceOptions, tree } from './lib';
+import { fetchSource, FNode, HandlerMethod, LoggingService, parseRecipeFile, Recipe, RecipeSchema, Renderer, SourceOptions, tree } from './lib';
 
 const logger = new LoggingService('fst');
 
@@ -10,13 +11,42 @@ const logger = new LoggingService('fst');
  * @param  {Recipe[]}  recipes              The recipes
  * @param  {}          options?:CliOptions  The options cli options
  *
- * @return {Handler}   { description_of_the_return_value }
+ * @return {HandlerMethod}   { description_of_the_return_value }
  */
 export const recipeHandler =
-  (recipes: Recipe[], options?: CliOptions): Handler =>
+  (recipes: Recipe[], options?: CliOptions): HandlerMethod =>
   async (node: FNode): Promise<void> => {
     node.outputs.forEach((output) => recipes.push(...parseRecipeFile(output, options)));
   };
+
+/**
+ * { function_description }
+ *
+ * @param  {Recipe}              recipe           The recipe
+ * @param  {('after'|'before')}  script           The script
+ * @param  {boolean}             [verbose=false]  The verbose
+ *
+ * @return {Promise<string>}     { description_of_the_return_value }
+ */
+export const runRecipeScripts = async (recipe: Recipe, script: 'before' | 'after', verbose: boolean = false): Promise<string> => {
+  if (!recipe?.scripts?.[script]) {
+    return Promise.resolve(null);
+  }
+
+  const cwd = recipe.to || '.';
+
+  return new Promise((resolve, reject) => {
+    logger.info(`executing ${recipe.name} ${script} from ${cwd}:\n${logger.ylw(recipe.scripts[script])}`);
+    const options: ExecOptions = { cwd: cwd || '.' };
+
+    const proc = exec(recipe.scripts[script], options, (error, stdout) => (error ? reject({ error, stdout }) : resolve(stdout)));
+
+    if (verbose) {
+      proc.stdout.on('data', (d) => process.stdout.write(d));
+    }
+    proc.stderr.on('data', (d) => process.stderr.write(d));
+  });
+};
 
 /**
  * { function_description }
@@ -26,21 +56,20 @@ export const recipeHandler =
  * @param {(Array|string[])}  sourceDirs                         The source dirs
  * @param {<type>}            options?:CliOptions&SourceOptions  The options cli options source options
  */
-export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: string[], options?: CliOptions & SourceOptions) => {
+export const runRecipe = async (recipe: Recipe, handler: HandlerMethod, sourceDirs: string[], options?: CliOptions & SourceOptions) => {
   logger.debug({ recipe });
+
+  await promises.mkdir(recipe.to, { recursive: true });
+  // await runRecipeScripts(recipe, 'prefetch' as any);
 
   if (!recipe.from) {
     return;
   }
 
-  collectRecipeHooks(recipe);
-
   const source = await fetchSource(recipe.from, { subdirs: recipe.includeDirs, cache: options?.cache });
   if (recipe.type == 'repo' || recipe.type == 'remote') {
     sourceDirs.push(source);
   }
-
-  await Promise.all(recipe.before?.map?.((callback) => callback(recipe)));
 
   const root = await tree(source, { exclude: recipe.excludeDirs });
 
@@ -50,11 +79,11 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
     renderer.registerFilenameHandler('.fstr.js', handler);
   }
 
-  await Promise.all(recipe.prerender?.map?.((callback) => callback(recipe, renderer)));
-
+  await runRecipeScripts(recipe, 'before');
+  if (recipe.scripts?.prerender) {
+    await require(recipe.scripts.prerender)(recipe, renderer);
+  }
   await renderer.render();
-
-  await Promise.all(recipe.after?.map?.((callback) => callback(recipe)));
 };
 
 /**
@@ -67,12 +96,13 @@ export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: st
  *
  * @return {Promise<void>}  { description_of_the_return_value }
  */
-export const runRecipes = async (recipes: Recipe[], handler: Handler, sourceDirs: string[], options?: CliOptions): Promise<void> => {
+export const runRecipes = async (recipes: Recipe[], handler: HandlerMethod, sourceDirs: string[], options?: CliOptions): Promise<void> => {
   const maxConcurrent = options.parallel || 10;
 
   while (recipes.length) {
     const batch = recipes.splice(0, maxConcurrent).map(async (recipe) => {
       await runRecipe(recipe, handler, sourceDirs, options);
+      await runRecipeScripts(recipe, 'after');
 
       if (recipe.recipes?.length) {
         recipes.push(...recipe.recipes);
@@ -94,18 +124,18 @@ export const runRecipes = async (recipes: Recipe[], handler: Handler, sourceDirs
  *
  * @return {Promise<void>}  { description_of_the_return_value }
  */
-export const fst = async (pathlike: string[], options?: CliOptions): Promise<void> => {
+export const fst = async (pathlike: (string | RecipeSchema)[], options?: CliOptions): Promise<void> => {
   options = options || {};
 
   const recipes = [];
   const sourceDirs: string[] = [];
-  let handler: Handler = null;
+  let handler: HandlerMethod = null;
 
   try {
     for (const file of pathlike) {
       recipes.push(...parseRecipeFile(file, options));
     }
-    logger.log('fst parsed input', logger.blu(JSON.stringify({ recipes }, null, 2)));
+    logger.log('fst parsed input', logger.blu(JSON.stringify(recipes, null, 2)));
 
     handler = recipeHandler(recipes, options);
 

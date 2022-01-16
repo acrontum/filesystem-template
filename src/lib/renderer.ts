@@ -3,15 +3,28 @@ import { basename, relative } from 'path';
 import { FNode } from './fnode';
 import { LoggingService } from './log.service';
 
-export type Handler = (node: FNode) => Promise<any>;
+export type HandlerMethod = (node: FNode) => string[] | void | Promise<string[] | void>;
+export type HandlerOptions = {
+  /*
+   * Prevent oter handlers from running after
+   */
+  stopPropagation?: boolean;
+};
+
+export type Handler = {
+  run: HandlerMethod;
+  options?: HandlerOptions;
+};
 
 export interface RenderOptions {
   /**
-   * Remove dest folder before rendering
+   * Recursively remove dest folder before rendering
+   * default: false
    */
   cleanFirst?: boolean;
   /**
    * Render all child nodes recursively
+   * default: true. Does nothing when false at the moment...
    */
   recursive?: boolean;
 }
@@ -24,8 +37,8 @@ const logger = new LoggingService('renderer');
  * @class Renderer (name)
  */
 export class Renderer {
-  handlers: Record<string, Handler[]> = {};
-  templaters: Record<string, Handler[]> = {};
+  keyHandlers: Record<string, Handler[]> = {};
+  filenameHandlers: Record<string, Handler[]> = {};
   dest: string;
   root: FNode;
 
@@ -42,8 +55,9 @@ export class Renderer {
    * @param {string}   ext        The extent
    * @param {Handler}  templater  The templater
    */
-  registerFilenameHandler(ext: string, templater: Handler) {
-    this.templaters[ext] = (this.templaters[ext] || []).concat(templater);
+  registerFilenameHandler(ext: string, run: HandlerMethod, options?: HandlerOptions) {
+    options = { stopPropagation: false, ...options };
+    this.filenameHandlers[ext] = (this.filenameHandlers[ext] || []).concat({ run, options });
     logger.debug(`registered templater for ${ext}`);
   }
 
@@ -53,8 +67,9 @@ export class Renderer {
    * @param {string}   key      The key
    * @param {Handler}  handler  The handler
    */
-  registerKeyHandler(key: string, handler: Handler) {
-    this.handlers[key] = (this.handlers[key] || []).concat(handler);
+  registerKeyHandler(key: string, run: HandlerMethod, options?: HandlerOptions) {
+    options = { stopPropagation: false, ...options };
+    this.keyHandlers[key] = (this.keyHandlers[key] || []).concat({ run, options });
     logger.debug(`registered handler for ${key}`);
   }
 
@@ -75,23 +90,31 @@ export class Renderer {
         await promises.rmdir(this.dest, { recursive: true });
       }
     }
-    const handlers = this.handlers[node.action];
 
-    if (handlers?.length) {
-      for (const handler of handlers) {
-        await handler(node);
+    const keyHandler = this.keyHandlers[node.action];
+    if (keyHandler?.length) {
+      for (const handler of keyHandler) {
+        node.outputs = [...node.outputs, ...((await handler.run(node)) || [])];
+        if (handler.options.stopPropagation) {
+          break;
+        }
       }
-    } else {
-      await node.generate();
     }
 
     if (!node.isDir) {
-      const engines = node.exts.reduce((exts, ext) => exts.concat([...(this.templaters[ext] || [])]), []);
+      const engines = node.exts.reduce((exts, ext) => exts.concat([...(this.filenameHandlers[ext] || [])]), []);
       if (engines?.length) {
         for (const engine of engines) {
-          await engine(node);
+          node.outputs = [...node.outputs, ...((await engine.run(node)) || [])];
+          if (engine.options.stopPropagation) {
+            break;
+          }
         }
       }
+    }
+
+    if (!node.outputs.length) {
+      await node.generate();
     }
 
     node.resolve();

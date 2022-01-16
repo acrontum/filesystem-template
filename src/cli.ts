@@ -20,6 +20,7 @@ export interface CliOptions extends RecipeOptions {
   recipe?: string[];
   verbose?: string[];
   silent?: string[];
+  'no-cache'?: boolean;
 }
 
 const usage = `fst [options | PATH]
@@ -40,10 +41,10 @@ these options apply to all recipe files
   -v, --verbose        Log more verbosely
 `;
 
-const booleans = ['h', 'help', 'R', 'recursive', 'c', 'cache', 'C', 'no-cache', 'S', 'sync'];
-const strings = ['recipe', 'r', 'I', 'imports', 'i', 'include', 'e', 'exclude', 'o', 'output', 'v', 'verbose', 's', 'silent', 'p', 'parallel'];
-const alias: Record<string, string> = { r: '_', recipe: '_' };
-const args = booleans.concat(strings);
+export const booleans = ['h', 'help', 'R', 'recursive', 'c', 'cache', 'C', 'no-cache', 'S', 'sync'];
+export const strings = ['recipe', 'r', 'I', 'imports', 'i', 'include', 'e', 'exclude', 'o', 'output', 'v', 'verbose', 's', 'silent', 'p', 'parallel'];
+export const alias: Record<string, string> = { r: '_', recipe: '_' };
+export const args = booleans.concat(strings);
 
 for (let i = 0; i < args.length; i += 2) {
   if (args[i] !== 'r' && args[i] !== 'recipe') {
@@ -57,7 +58,7 @@ for (let i = 0; i < args.length; i += 2) {
  *
  * @return {RecipeOptions}  The recipe options.
  */
-const cliToRecipe = (input: CliOptions): RecipeOptions => {
+export const cliToRecipe = (input: CliOptions): RecipeOptions => {
   return ['recursive', 'output', 'include', 'exclude', 'imports', 'cache', 'sync', 'parallel'].reduce((rOpts: RecipeOptions, key: string) => {
     if (key in input) {
       (rOpts as any)[key] = (input as any)[key];
@@ -105,7 +106,7 @@ export const cli = async () => {
     process.env.FST_LOG = ['', 'log', 'debug'][Math.min(options.verbose.length || 1, 2)];
   }
 
-  if ((options as any)['no-cache']) {
+  if (options['no-cache']) {
     options.cache = false;
   }
 

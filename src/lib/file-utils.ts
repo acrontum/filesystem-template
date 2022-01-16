@@ -33,9 +33,9 @@ export interface CacheInfo {
 }
 
 const logger = new LoggingService('file-utils');
-const exec = promisify(execCb);
-const sourceCache: Record<string, Promise<string>> = {};
 let packagePath: string;
+const sourceCache: Record<string, Promise<string>> = {};
+const exec = promisify(execCb);
 
 /**
  * { function_description }
@@ -261,7 +261,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
 
     if (options?.subdirs?.length) {
       await exec('git config core.sparseCheckout true', { cwd });
-      await promises.writeFile(join(cwd, '.git/info/sparse-checkout'), options?.subdirs.join('\n'), { encoding: 'utf8' });
+      await promises.writeFile(join(cwd, '.git/info/sparse-checkout'), options.subdirs.join('\n'), { encoding: 'utf8' });
     }
 
     if (!branch) {

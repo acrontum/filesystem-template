@@ -14,7 +14,7 @@ export const LogLevels = {
  * @class LoggingService (name)
  */
 export class LoggingService {
-  constructor(private context: string, private level?: keyof typeof LogLevels) {}
+  constructor(private context: string, public level?: keyof typeof LogLevels) {}
 
   /**
    * { function_description }

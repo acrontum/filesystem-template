@@ -9,6 +9,7 @@
     "module": "commonjs",
     "outDir": "./dist",
     "rootDir": "./",
+    "baseUrl": ".",
     "removeComments": true,
     "downlevelIteration": true,
     "strict": true,
@@ -30,6 +31,8 @@
     "declaration": true
   },
   "include": [
-    "src"
-  ],
+    "src",
+    "test/unit",
+    "test/e2e"
+  ]
 }
