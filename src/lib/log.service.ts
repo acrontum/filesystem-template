@@ -122,9 +122,9 @@ export class LoggingService {
    * @return {typeof console.log}      { description_of_the_return_value }
    */
   private bindLog(level: keyof typeof LogLevels): typeof console.log {
-    const target = LogLevels[this.level || (process.env.FST_LOG as keyof typeof LogLevels) || 'info'];
+    const maximum = LogLevels[this.level || (process.env.FST_LOG as keyof typeof LogLevels)] || LogLevels.info;
 
-    if (target !== -1 && LogLevels[level] <= target) {
+    if (maximum !== -1 && LogLevels[level] <= maximum) {
       return console[level as 'log'].bind(console, `${level.slice(0, 1).toUpperCase()} [${this.context}]`);
     }
 
