@@ -42,9 +42,9 @@ export const runRecipeScripts = async (recipe: Recipe, script: 'before' | 'after
     const proc = exec(recipe.scripts[script], options, (error, stdout) => (error ? reject({ error, stdout }) : resolve(stdout)));
 
     if (verbose) {
-      proc.stdout.on('data', (d) => process.stdout.write(d));
+      proc.stdout.pipe(process.stdout);
     }
-    proc.stderr.on('data', (d) => process.stderr.write(d));
+    proc.stderr.pipe(process.stderr);
   });
 };
 
