@@ -162,7 +162,7 @@ export const fetchSource = async (pathlike: string, options?: SourceOptions): Pr
 
   const cache = getCacheDir(url);
   if (!sourceCache[cache?.path]) {
-    sourceCache[cache?.path] = isRecipeFile(url.pathname) ? fetchRecipe(url, cache, options) : fetchRepo(url, cache, options);
+    sourceCache[cache?.path] = isRecipeFile(url.pathname) ? fetchRecipe(url, cache, options) : fetchRepo(cache, options);
   } else {
     logger.log(`cache hit on ${cache?.path}`);
   }
@@ -237,7 +237,7 @@ export const fetchRecipe = async (url: URL, cacheInfo: CacheInfo, options?: Sour
  *
  * @return {Promise<string>}  The repo.
  */
-export const fetchRepo = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
+export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
   let branch = cacheInfo.branch;
   const { path: repo, origin, repoName } = cacheInfo;
 
@@ -247,7 +247,7 @@ export const fetchRepo = async (url: URL, cacheInfo: CacheInfo, options?: Source
     return repo;
   }
 
-  logger.debug({ url, branch, repo, origin });
+  logger.debug({ branch, repo, origin });
   logger.info(`will clone ${branch ? `${logger.blu(branch)} of ` : ''}${logger.ylw(origin)} into ${logger.grn(repoName)}`);
 
   const cwd = repo;
