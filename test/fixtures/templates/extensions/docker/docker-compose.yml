@@ -1,0 +1,55 @@
+version: '3.7'
+
+services:
+  frontend:
+    container_name: frontend
+    build:
+      context: ../frontend
+    ports:
+      - 8080:80
+    expose:
+      - 80
+    depends_on:
+      - backend
+      - moxy
+    networks:
+      - project-network
+
+  backend:
+    container_name: backend
+    build:
+      context: ../backend
+    env_file:
+      - ../backend/.env.example
+    environment:
+      - PORT=80
+      - NODE_ENV=production
+    ports:
+      - 5000:80
+    depends_on:
+      - moxy
+    networks:
+      - project-network
+    volumes:
+      - ../backend/server.ts:/code/server.ts
+      - ../backend/tsconfig.json:/code/tsconfig.json
+      - ../backend/src:/code/src/
+    working_dir: /code
+    command: watch
+
+  moxy:
+    image: acrontum/moxy
+    container_name: moxy
+    volumes:
+      - ./routes:/opt/routes
+    environment:
+      - PORT=80
+    ports:
+      - 18443:80
+    networks:
+      - project-network
+    command: --allow-http-config --routes /opt/routes
+
+networks:
+  project-network:
+    name: project-network

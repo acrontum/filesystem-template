@@ -1,0 +1,16 @@
+summary: weather data
+description: Create a new weather record.
+requestBody:
+  description: Create weather entry
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '#/components/schemas/WeatherPost'
+responses:
+  '201':
+    description: Successful creation
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Weather'

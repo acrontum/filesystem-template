@@ -1,0 +1,28 @@
+[
+  {
+    "name": "parent 1",
+    "recipes": [
+      {
+        "name": "child",
+        "recipes": [
+          {
+            "name": "grandchild",
+            "scripts": {
+              "after": "echo '{\"name\": \"great grandchild\", \"depends\": [\"parent 2\"]}' > test.fstr.json"
+            },
+            "recipes": [
+              {
+                "name": "will load the circular dep",
+                "from": "test.fstr.json"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "parent 2",
+    "depends": ["great grandchild"]
+  }
+]

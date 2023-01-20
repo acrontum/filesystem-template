@@ -1,0 +1,10 @@
+[
+  {
+    "name": "a",
+    "depends": ["b"]
+  },
+  {
+    "name": "b",
+    "depends": ["c"]
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "name": "provision.sh",
+    "from": "https://patmcgowan.dev/scripts/provision.sh",
+    "to": "shells",
+    "scripts": {
+      "before": "echo test"
+    }
+  }
+]

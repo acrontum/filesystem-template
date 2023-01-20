@@ -1,0 +1,12 @@
+{{
+  extend('./model.yml', {
+    omit: [
+      'properties.id'
+    ],
+    require: [
+      'properties.date',
+      'properties.location',
+      'properties.temperature'
+    ]
+  })
+}}

@@ -1,0 +1,207 @@
+[
+  {
+    "name": "nested example",
+    "recipes": [
+      {
+        "from": "nested.fstr.json",
+        "scripts": {
+          "after": "cat nested.fstr.json"
+        }
+      }
+    ],
+    "scripts": {
+      "after": "echo '{}' > nested.fstr.json"
+    },
+    "to": "example/files"
+  },
+  {
+    "name": "original",
+    "recipes": [
+      {
+        "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
+        "name": "fst-url",
+        "to": "egal"
+      },
+      {
+        "name": "fst-test",
+        "recipes": [
+          {
+            "from": "../../test.fstr.json",
+            "name": "there and back again"
+          }
+        ],
+        "to": ".fst/asdf/"
+      },
+      {
+        "data": {},
+        "from": "from",
+        "name": "name",
+        "recipes": [
+          {
+            "name": "a nested recipe",
+            "to": "nested"
+          }
+        ],
+        "scripts": {
+          "after": "string;",
+          "before": "string;",
+          "prerender": "string;"
+        },
+        "to": "to"
+      },
+      {
+        "data": {},
+        "from": "test/fixtures",
+        "name": "small",
+        "recipes": [],
+        "scripts": {
+          "after": "string;",
+          "before": "string;",
+          "prerender": "string;"
+        },
+        "to": "to"
+      }
+    ]
+  },
+  {
+    "name": "test fstr json",
+    "recipes": [
+      {
+        "name": "url containing fst-test",
+        "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
+        "to": "url"
+      },
+      {
+        "name": "nested",
+        "to": "nested/asdf/",
+        "scripts": {
+          "after": "echo '{ \"name\": \"echod\", \"scripts\": { \"after\": \"echo 'i am blocking something' && touch asdf.txt && sleep 3\" } }' > nested.fstr.json"
+        },
+        "recipes": [
+          {
+            "name": "running nested output",
+            "from": "nested.fstr.json",
+            "recipes": [
+              {
+                "name": "something",
+                "depends": ["echod"],
+                "scripts": {
+                  "before": "echo 'if this prints, I have been unblocked!'"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "invalid from",
+        "from": "from",
+        "to": "to",
+        "recipes": [
+          {
+            "name": "a nested recipe",
+            "to": "nested"
+          }
+        ],
+        "scripts": {
+          "before": "string;",
+          "after": "string;",
+          "prerender": "string;"
+        },
+        "data": {}
+      },
+      {
+        "name": "local fixtures",
+        "from": "../test/fixtures",
+        "to": "to",
+        "recipes": [],
+        "scripts": {
+          "before": "echo before",
+          "after": "echo after"
+        },
+        "data": {}
+      }
+    ]
+  },
+  {
+    "name": "various errors",
+    "children": [
+      {
+        "name": "url containing fst-test",
+        "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
+        "to": "url"
+      },
+      {
+        "name": "nested",
+        "to": "nested/asdf/",
+        "scripts": {
+          "after": "echo '{ \"name\": \"echod\", \"scripts\": { \"after\": \"echo done && touch asdf.txt\" } }' > nested.fstr.json"
+        },
+        "recipes": [
+          {
+            "name": "running nested output",
+            "from": "nested.fstr.json",
+            "scripts": {
+              "before": "echo before nested",
+              "after": "echo after nested"
+            },
+            "recipes": [
+              {
+                "name": "something",
+                "depends": ["echod"],
+                "scripts": {
+                  "before": "echo 'something before echo'",
+                  "after": "echo something after echo"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "after running nested output",
+        "depends": ["running nested output"],
+        "scripts": {
+          "before": "echo after running nested output BEFORE",
+          "after": "echo after running nested output AFTER"
+        }
+      },
+      {
+        "name": "never will work",
+        "depends": ["does not exist"]
+      },
+      {
+        "name": "never will work part 2",
+        "depends": ["never will work"]
+      },
+      {
+        "name": "invalid from",
+        "from": "from",
+        "to": "to",
+        "recipes": [
+          {
+            "name": "a nested recipe",
+            "to": "nested"
+          }
+        ],
+        "scripts": {
+          "before": "string;",
+          "after": "string;",
+          "prerender": "string;"
+        },
+        "data": {}
+      },
+      {
+        "name": "local fixtures",
+        "from": "../test/fixtures",
+        "to": "to",
+        "recipes": [],
+        "scripts": {
+          "before": "echo local fixtures:before",
+          "after": "echo local fixtures:after"
+        },
+        "data": {}
+      }
+    ]
+  }
+]

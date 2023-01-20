@@ -1,0 +1,10 @@
+summary: weather data
+description: Get the latest temperatures
+x-passResponse: true
+responses:
+  '200':
+    description: Successful fetch
+    content:
+      text/html:
+        schema:
+          type: string

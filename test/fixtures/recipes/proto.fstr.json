@@ -1,0 +1,27 @@
+[
+  {
+    "name": "acr-nest-std",
+    "recipes": [
+      {
+        "name": "acr-nestjs-rest",
+        "from": "../test/fixtures/templates/nestjs-template/fstr",
+        "to": "package",
+        "scripts": {
+          "after": "npm i nunjucks"
+        }
+      },
+      {
+        "name": "generate",
+        "from": "../test/fixtures/templates/nestjs-template",
+        "fileHandler": "fstr/fstr-scaffolld.js",
+        "depends": ["acr-nestjs-rest"],
+        "data": {
+          "modules": {
+            "auth": {},
+            "pat": {}
+          }
+        }
+      }
+    ]
+  }
+]

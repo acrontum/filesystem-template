@@ -1,0 +1,14 @@
+[
+  {
+    "name": "a",
+    "depends": ["b"]
+  },
+  {
+    "name": "b",
+    "depends": ["c"]
+  },
+  {
+    "name": "c",
+    "depends": ["a"]
+  }
+]

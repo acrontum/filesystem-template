@@ -1,0 +1,22 @@
+{
+  "nodegenDir": "src/http",
+  "nodegenMockDir": "src/domains/__mocks__",
+  "nodegenType": "server",
+  "segmentFirstGrouping": 2,
+  "segmentSecondGrouping": 4,
+  "helpers": {
+    "stub": {
+      "jwtType": "Weather",
+      "requestType": "NodegenRequest"
+    },
+    "tests": {
+      "outDir": "src/domains/__tests__"
+    },
+    "objectReduceByMapOptions": {
+      "allowNullish": false,
+      "keepKeys": false,
+      "throwErrorOnAlien": false,
+      "allowNullishKeys": false
+    }
+  }
+}

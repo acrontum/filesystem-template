@@ -1,0 +1,11 @@
+[
+  {
+    "name": "parent",
+    "depends": ["child"],
+    "recipes": [
+      {
+        "name": "child"
+      }
+    ]
+  }
+]
