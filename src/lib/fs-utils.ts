@@ -3,12 +3,12 @@ import { fdir } from 'fdir';
 import { existsSync, promises } from 'fs';
 import * as http from 'http';
 import * as https from 'https';
-import { basename, dirname, join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import { URL } from 'url';
 import { promisify } from 'util';
-import { FNode } from './fnode';
-import { LoggingService } from './log.service';
-import { isRecipeFile } from './recipe';
+import { RecipeRuntimeError } from './errors';
+import { LoggingService } from './logging.service';
+import { VirtualFile } from './virtual-file';
 
 export interface SourceOptions {
   root?: string;
@@ -33,31 +33,31 @@ export interface CacheInfo {
 }
 
 const logger = new LoggingService('file-utils');
-const exec = promisify(execCb);
-const sourceCache: Record<string, Promise<string>> = {};
 let packagePath: string;
+const cachedSourceFiles: Record<string, Promise<string>> = {};
+const exec = promisify(execCb);
 
-/**
- * { function_description }
- *
- * @param  {string}          dir                The dir
- * @param  {}                opts?:TreeOptions  The options tree options
- *
- * @return {Promise<FNode>}  { description_of_the_return_value }
- */
-export const tree = async (dir: string, opts?: TreeOptions): Promise<FNode> => {
-  const fsTree: Record<string, FNode> = {};
-  let root: FNode;
+export const isRecipeFile = (file: string): boolean => {
+  return /\.fstr\.js(on)?$/.test(file);
+};
 
-  const getFNode = (type: string, filePath: string) => {
-    const name = filePath.replace(dir, '') || '/';
-    const node = new FNode(type, name);
-    if (root) {
-      node.root = root;
-    } else {
+export const isRepo = (file: string): boolean => {
+  return /\.git([?#].*)?$/.test(file);
+};
+
+export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOptions): Promise<VirtualFile> => {
+  const fsTree: Record<string, VirtualFile> = {};
+  let root: VirtualFile = null;
+
+  const getVirtualFile = (type: string, filePath: string, rootPath = dirPath) => {
+    const name = filePath.replace(rootPath, '') || '/';
+    const node = new VirtualFile(type, name);
+
+    node.root = root;
+    if (!root) {
       root = node;
     }
-    node.realPath = filePath;
+    node.fullSourcePath = filePath;
 
     const parent = fsTree[name?.replace(/\/[^\/]+$/, '') || '/'];
     node.setParent(parent);
@@ -67,29 +67,28 @@ export const tree = async (dir: string, opts?: TreeOptions): Promise<FNode> => {
     return node;
   };
 
-  const groups = await walk(dir, opts?.exclude);
+  if ((await promises.stat(dirPath)).isFile()) {
+    getVirtualFile('dir', dirPath);
+    getVirtualFile('file', dirPath, dirname(dirPath));
+
+    return root;
+  }
+
+  const groups = await listAllFiles(dirPath, opts?.exclude);
 
   groups.forEach(({ dir, files }) => {
-    getFNode('dir', dir);
+    getVirtualFile('dir', dir);
 
     files.forEach((file) => {
-      getFNode('file', file);
+      getVirtualFile('file', file);
     });
   });
 
   return root;
 };
 
-/**
- * { function_description }
- *
- * @param  {string}            dir                The dir
- * @param  {}                  exclude?:string[]  The exclude string
- *
- * @return {Promise<Group[]>}  { description_of_the_return_value }
- */
-export const walk = async (dir: string, exclude?: string[]): Promise<Group[]> => {
-  const ignored = ['.git', 'node_modules', ...(exclude || [])];
+export const listAllFiles = async (dir: string, exclude?: string[]): Promise<Group[]> => {
+  const ignored = exclude || ['.git', 'node_modules'];
 
   const files = (await new fdir()
     .crawlWithOptions(dir, {
@@ -102,13 +101,6 @@ export const walk = async (dir: string, exclude?: string[]): Promise<Group[]> =>
   return files.sort((a, b) => a.dir.localeCompare(b.dir));
 };
 
-/**
- * Finds a package json.
- *
- * Usually, npm_package_json contains the path, unless running with npx
- *
- * @return {string}  path to package.json
- */
 export const getProjectRoot = (): string => {
   if (packagePath) {
     return packagePath;
@@ -135,19 +127,11 @@ export const getProjectRoot = (): string => {
   return packagePath;
 };
 
-/**
- * Fetches a source.
- *
- * @param  {string}           pathlike                The pathlike
- * @param  {}                 options?:SourceOptions  The options source options
- *
- * @return {Promise<string>}  The source.
- */
 export const fetchSource = async (pathlike: string, options?: SourceOptions): Promise<string> => {
   options = options || {};
 
   if (existsSync(pathlike)) {
-    logger.info(`will copy ${logger.grn(pathlike)}`);
+    logger.log(`will copy ${logger.grn(pathlike)}`);
 
     return pathlike;
   }
@@ -157,30 +141,29 @@ export const fetchSource = async (pathlike: string, options?: SourceOptions): Pr
     url = new URL(pathlike);
   } catch (e) {
     // not a url
-    throw new Error(`No such file: ${pathlike}`);
+    throw new RecipeRuntimeError(`file not found ${pathlike}`);
   }
 
-  const cache = getCacheDir(url);
-  if (!sourceCache[cache?.path]) {
-    sourceCache[cache?.path] = isRecipeFile(url.pathname) ? fetchRecipe(url, cache, options) : fetchRepo(cache, options);
-  } else {
+  const cache = getChacheInfo(url);
+  if (cachedSourceFiles[cache?.path]) {
     logger.log(`cache hit on ${cache?.path}`);
+
+    return cachedSourceFiles[cache?.path];
   }
 
-  return sourceCache[cache?.path];
+  if (isRepo(url.pathname)) {
+    cachedSourceFiles[cache?.path] = fetchRepo(cache, options);
+  } else {
+    cachedSourceFiles[cache?.path] = fetchFileFromUrl(url, cache, options);
+  }
+
+  return cachedSourceFiles[cache?.path];
 };
 
-/**
- * Gets the cache dir.
- *
- * @param  {URL}        url  The url
- *
- * @return {CacheInfo}  The cache dir.
- */
-export const getCacheDir = (url: URL): CacheInfo => {
+export const getChacheInfo = (url: URL): CacheInfo => {
   const projectDir = getProjectRoot();
 
-  if (isRecipeFile(url.pathname)) {
+  if (!isRepo(url.pathname)) {
     const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
 
     return { path: join(projectDir, filename) };
@@ -194,17 +177,8 @@ export const getCacheDir = (url: URL): CacheInfo => {
   return { path: repo, origin, repoName, branch };
 };
 
-/**
- * Fetches a recipe.
- *
- * @param  {URL}              url                     The url
- * @param  {CacheInfo}        cacheInfo               The cache information
- * @param  {}                 options?:SourceOptions  The options source options
- *
- * @return {Promise<string>}  The recipe.
- */
-export const fetchRecipe = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
-  const output = cacheInfo.path;
+export const fetchFileFromUrl = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
+  const output = resolve(cacheInfo.path);
 
   if (options?.cache && existsSync(output)) {
     logger.info(`will copy ${logger.grn(output)} (cached)`);
@@ -213,30 +187,30 @@ export const fetchRecipe = async (url: URL, cacheInfo: CacheInfo, options?: Sour
   }
 
   const file = await new Promise<string>((resolve, reject) => {
-    (url.protocol == 'http:' ? http : https)
-      .request(url, (res) => {
-        let data = '';
-        res.on('data', (d) => (data += d.toString()));
-        res.on('end', () => resolve(data));
-        res.on('error', reject);
-      })
-      .end();
+    const req = (url.protocol == 'http:' ? http : https).request(url, (res) => {
+      let data = '';
+      res.on('data', (d) => (data += d.toString()));
+      res.on('end', () => {
+        if (res.statusCode < 300) {
+          return resolve(data);
+        }
+
+        const { statusCode, headers } = res;
+        reject({ message: `Failed to fetch from URL`, url: url.href, response: { statusCode, headers, body: data } });
+      });
+      res.on('error', (error) => reject({ message: `Failed to fetch from URL`, url: url.href, error }));
+    });
+
+    req.on('error', (error) => reject({ message: `Failed to fetch from URL`, url: url.href, error }));
+    req.end();
   });
 
+  await promises.mkdir(dirname(output), { recursive: true });
   await promises.writeFile(output, file);
 
   return output;
 };
 
-/**
- * Fetches a repo.
- *
- * @param  {URL}              url                     The url
- * @param  {CacheInfo}        cacheInfo               The cache information
- * @param  {}                 options?:SourceOptions  The options source options
- *
- * @return {Promise<string>}  The repo.
- */
 export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
   let branch = cacheInfo.branch;
   const { path: repo, origin, repoName } = cacheInfo;
@@ -261,7 +235,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
 
     if (options?.subdirs?.length) {
       await exec('git config core.sparseCheckout true', { cwd });
-      await promises.writeFile(join(cwd, '.git/info/sparse-checkout'), options?.subdirs.join('\n'), { encoding: 'utf8' });
+      await promises.writeFile(join(cwd, '.git/info/sparse-checkout'), options.subdirs.join('\n'), { encoding: 'utf8' });
     }
 
     if (!branch) {
@@ -274,7 +248,8 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
       branch = basename(res?.stdout?.replace?.(/\n/g, ''));
     }
 
-    await exec(`git pull origin ${branch}`, { cwd });
+    await exec(`git fetch origin ${branch}`, { cwd });
+    await exec(`git reset --hard origin/${branch}`, { cwd });
 
     return repo;
   } catch (e) {

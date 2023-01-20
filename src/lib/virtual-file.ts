@@ -1,90 +1,65 @@
 import { promises } from 'fs';
-import { basename, join } from 'path';
-import { LoggingService } from './log.service';
+import { basename, extname, join } from 'path';
+import { RecipeRuntimeError } from './errors';
+import { LoggingService } from './logging.service';
 
 export type PathGetter = (p?: string) => string;
 
-const logger = new LoggingService('FNode');
+const logger = new LoggingService('VirtualFile');
 
 /**
- * This class describes a f node.
+ * A representation of a file in the source folder, prior to rendering
  *
- * @class FNode (name)
+ * @class VirtualFile (name)
  */
-export class FNode {
+export class VirtualFile {
   id: Symbol;
   name: string;
-  relativePath: string;
-  realPath: string;
+  relativeSourcePath: string;
+  fullSourcePath: string;
   isDir: boolean;
-  children: FNode[];
+  children: VirtualFile[];
   outputs: string[];
   resolve: () => void;
   reject: (...args: any[]) => void;
   generated?: Promise<void>;
   baseUrl?: string;
-  root?: FNode;
-  parent?: FNode;
-  exts?: string[];
+  root?: VirtualFile;
+  parent?: VirtualFile;
+  ext?: string;
   action?: string;
   args?: Record<string, any>;
   waitSiblings?: boolean;
+  skip?: boolean;
 
-  constructor(type: string, relativePath: string) {
-    this.id = Symbol('FNode');
-    this.relativePath = relativePath;
-    this.name = basename(relativePath) || '/';
+  constructor(type: string, relativeSourcePath: string) {
+    this.id = Symbol('VirtualFile');
+    this.relativeSourcePath = relativeSourcePath;
+    this.name = basename(relativeSourcePath) || '/';
     this.isDir = type === 'dir';
     this.outputs = [];
     this.children = [];
-    this.exts = [];
+    this.skip = false;
     if (!this.isDir) {
-      const exts = this.name.split('.');
-      let prefix = '';
-      while (exts?.length) {
-        this.exts.push(`${prefix}${exts.join('.')}`);
-        exts.shift();
-        prefix = '.';
-      }
+      this.ext = extname(this.name);
     }
     this.prepare();
   }
 
-  /**
-   * Adds a child.
-   *
-   * @param  {FNode}    child  The child
-   *
-   * @return {boolean}  { description_of_the_return_value }
-   */
-  addChild(child: FNode): boolean {
+  addChild(child: VirtualFile): boolean {
     this.children.push(child);
 
     return true;
   }
 
-  /**
-   * Removes a child.
-   *
-   * @param  {FNode}    child  The child
-   *
-   * @return {boolean}  { description_of_the_return_value }
-   */
-  removeChild(child: FNode): boolean {
+  removeChild(child: VirtualFile): boolean {
     const len = this.children.length;
     this.children = this.children.filter((c) => c.id !== child.id);
 
     return this.children.length !== len;
   }
 
-  /**
-   * Sets the parent.
-   *
-   * @param  {FNode}    parent  The parent
-   *
-   * @return {boolean}  { description_of_the_return_value }
-   */
-  setParent(parent: FNode): boolean {
+  setParent(parent: VirtualFile): boolean {
     if (!parent) {
       return false;
     }
@@ -96,27 +71,17 @@ export class FNode {
     return parent.addChild(this);
   }
 
-  /**
-   * Gets the siblings.
-   *
-   * @return {FNode[]}  The siblings.
-   */
-  getSiblings(): FNode[] {
+  getSiblings(): VirtualFile[] {
     return this.parent?.children?.filter?.((n) => n.id !== this.id) || [];
   }
 
-  /**
-   * { function_description }
-   *
-   * @return {Promise<string[]>}  { description_of_the_return_value }
-   */
   async generateSiblings(): Promise<string[]> {
     this.waitSiblings = true;
 
     const outputs: string[] = [];
     const waiting = this.getSiblings().map(async (siblingNode) => {
       if (siblingNode.waitSiblings) {
-        throw new Error('Multiple nodes are waiting for siblings');
+        throw new RecipeRuntimeError('Multiple nodes are waiting for siblings');
       }
 
       await siblingNode.generated;
@@ -129,14 +94,7 @@ export class FNode {
     return outputs;
   }
 
-  /**
-   * { function_description }
-   *
-   * @param  {}                   name?:string|PathGetter  The name string path getter
-   *
-   * @return {Promise<string[]>}  { description_of_the_return_value }
-   */
-  async generate(name?: string | PathGetter): Promise<string[]> {
+  async generateFileOrFolder(name?: string | PathGetter): Promise<string[]> {
     logger.debug(`${this.name}: generate`);
     try {
       if (this.isDir) {
@@ -153,13 +111,16 @@ export class FNode {
     }
   }
 
-  /**
-   * { function_description }
-   *
-   * @param  {}                   name?:string|PathGetter  The name string path getter
-   *
-   * @return {Promise<string[]>}  { description_of_the_return_value }
-   */
+  getOutputs(name?: string | PathGetter): string[] {
+    if (this.outputs.length) {
+      return this.outputs;
+    }
+
+    const getFileName = this.getPathBuilder(name);
+
+    return this.getPrevOut().map((out) => join(out, getFileName(out)));
+  }
+
   async mkdir(name?: string | PathGetter): Promise<string[]> {
     const getFileName = this.getPathBuilder(name);
 
@@ -180,37 +141,40 @@ export class FNode {
     return this.outputs;
   }
 
-  /**
-   * { function_description }
-   *
-   * @param  {}                   name?:string|PathGetter  The name string path getter
-   *
-   * @return {Promise<string[]>}  { description_of_the_return_value }
-   */
   async mkfile(name?: string | PathGetter): Promise<string[]> {
     const getFileName = this.getPathBuilder(name);
 
     await Promise.all(
       this.getPrevOut().map(async (out) => {
-        const dir = join(out, getFileName(out));
-        await promises.copyFile(this.realPath, dir);
-        this.outputs.push(dir);
-        logger.debug(`${this.name}: out ${dir}`);
+        const output = join(out, getFileName(out));
+        const exists = await promises
+          .access(output)
+          .then(() => true)
+          .catch(() => false);
+        if (exists) {
+          logger.debug(`${this.name}: exists ${output}`);
+          return;
+        }
+        await promises.copyFile(this.fullSourcePath, output);
+        this.outputs.push(output);
+        logger.debug(`${this.name}: out ${output}`);
 
-        return dir;
+        return output;
       }),
     );
 
     return this.outputs;
   }
 
-  /**
-   * Gets the path builder.
-   *
-   * @param  {}            name?:string|PathGetter  The name string path getter
-   *
-   * @return {PathGetter}  The path builder.
-   */
+  toJSON(): Record<string, any> {
+    return {
+      ...this,
+      name: this.name,
+      parent: this.parent ? `VirtualFile<${this.parent.name}>` : null,
+      children: this.children.map((c) => `VirtualFile<${c.name}>`),
+    };
+  }
+
   private getPathBuilder(name?: string | PathGetter): PathGetter {
     let getter: PathGetter = () => this.name;
     if (typeof name === 'function') {
@@ -222,18 +186,10 @@ export class FNode {
     return getter;
   }
 
-  /**
-   * Gets the previous out.
-   *
-   * @return {string[]}  The previous out.
-   */
   private getPrevOut(): string[] {
     return this.baseUrl ? [this.baseUrl] : this.parent?.outputs;
   }
 
-  /**
-   * { function_description }
-   */
   private prepare(): void {
     this.generated = new Promise<void>((resolve, reject) => {
       this.resolve = () => {
@@ -252,19 +208,7 @@ export class FNode {
     this.args = parts[3]?.split?.(';')?.reduce?.((acc: Record<string, string | string[]>, v) => {
       const [key, value] = v.split('=');
 
-      return Object.assign(acc, {
-        [key]: /,/.test(value) ? value.split(',') : value,
-      });
+      return { ...acc, [key]: /,/.test(value) ? value.split(',') : value };
     }, {});
-  }
-
-  toJSON(): Record<string, any> {
-    return {
-      ...this,
-      name: this.name,
-      parent: this.parent ? `FNode<${this.parent.name}>` : null,
-      children: this.children.map((c) => `FNode<${c.name}>`),
-      // children: this.children,
-    };
   }
 }

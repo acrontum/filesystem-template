@@ -1,4 +1,3 @@
-import 'source-map-support/register'
-export * from './lib';
-export * from './fst';
 export * from './cli';
+export * from './fst';
+export * from './lib';

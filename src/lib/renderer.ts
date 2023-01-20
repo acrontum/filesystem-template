@@ -1,115 +1,124 @@
+import { createHash } from 'crypto';
 import { promises } from 'fs';
-import { basename, relative } from 'path';
-import { FNode } from './fnode';
-import { LoggingService } from './log.service';
+import { relative } from 'path';
+import { VirtualFile } from './virtual-file';
 
-export type Handler = (node: FNode) => Promise<any>;
+export type HandlerMethod = (node: VirtualFile) => string[] | void | Promise<string[] | void>;
+export type HandlerOptions = {
+  /*
+   * Prevent other handlers from running after
+   */
+  stopPropagation?: boolean;
+};
+
+export type Handler = {
+  run: HandlerMethod;
+  options?: HandlerOptions;
+};
 
 export interface RenderOptions {
   /**
-   * Remove dest folder before rendering
+   * Recursively remove dest folder before rendering
+   * default: false
    */
   cleanFirst?: boolean;
-  /**
-   * Render all child nodes recursively
-   */
-  recursive?: boolean;
 }
 
-const logger = new LoggingService('renderer');
-
-/**
- * This class describes a renderer.
- *
- * @class Renderer (name)
- */
 export class Renderer {
-  handlers: Record<string, Handler[]> = {};
-  templaters: Record<string, Handler[]> = {};
+  keyHandlers: Record<string, Handler[]> = {};
+  filenameHandlers: Record<string, Handler[]> = {};
+  handlers: Handler[] = [];
   dest: string;
-  root: FNode;
+  root: VirtualFile;
+  cache: Record<string, Function> = {};
+  env: Record<string, string> = {};
 
-  constructor(root: FNode, dest: string) {
+  constructor(root: VirtualFile, dest: string) {
     this.dest = dest;
     this.root = root;
-    this.root.baseUrl = relative(process.cwd(), dest);
-    this.registerDefaultHandlers();
+    this.root.baseUrl = relative(process.cwd(), dest) || '.';
   }
 
   /**
-   * { function_description }
+   * Add a handler which is called on each file during render
    *
-   * @param {string}   ext        The extent
-   * @param {Handler}  templater  The templater
+   * @param {HandlerMethod}  run      Handler callback
+   * @param {HandlerOptions} options  The handler options
    */
-  registerFilenameHandler(ext: string, templater: Handler) {
-    this.templaters[ext] = (this.templaters[ext] || []).concat(templater);
-    logger.debug(`registered templater for ${ext}`);
+  onFile(run: HandlerMethod, options?: HandlerOptions): void {
+    options = { stopPropagation: false, ...options };
+    this.handlers.push({ run, options });
   }
 
-  /**
-   * { function_description }
-   *
-   * @param {string}   key      The key
-   * @param {Handler}  handler  The handler
-   */
-  registerKeyHandler(key: string, handler: Handler) {
-    this.handlers[key] = (this.handlers[key] || []).concat(handler);
-    logger.debug(`registered handler for ${key}`);
-  }
-
-  /**
-   * { function_description }
-   *
-   * @param  {}               opt?:RenderOptions  The option render options
-   * @param  {}               node?:FNode         The node f node
-   *
-   * @return {Promise<void>}  { description_of_the_return_value }
-   */
-  async render(opt?: RenderOptions, node?: FNode): Promise<void> {
-    opt = opt || { recursive: true };
-
-    if (!node) {
-      node = this.root;
-      if (opt.cleanFirst) {
-        await promises.rmdir(this.dest, { recursive: true });
-      }
-    }
-    const handlers = this.handlers[node.action];
-
-    if (handlers?.length) {
-      for (const handler of handlers) {
-        await handler(node);
-      }
-    } else {
-      await node.generate();
+  async renderTree(opt?: RenderOptions): Promise<void> {
+    if (opt?.cleanFirst) {
+      await promises.rmdir(this.dest, { recursive: true });
     }
 
-    if (!node.isDir) {
-      const engines = node.exts.reduce((exts, ext) => exts.concat([...(this.templaters[ext] || [])]), []);
-      if (engines?.length) {
-        for (const engine of engines) {
-          await engine(node);
+    await this.render([this.root]);
+  }
+
+  async render(nodes?: VirtualFile[]): Promise<void> {
+    while (nodes.length) {
+      const batch = nodes.splice(0, 10);
+
+      await Promise.all(
+        batch.map(async (node) => {
+          for (const handler of this.handlers) {
+            await handler.run(node);
+            if (handler.options?.stopPropagation) {
+              break;
+            }
+          }
+
+          if (!node.outputs.length && !node.skip) {
+            await node.generateFileOrFolder();
+          }
+
+          node.resolve();
+          nodes.push(...node.children);
+        }),
+      );
+    }
+  }
+
+  /**
+   * Simple template render function
+   *
+   * Treats a file as a js template string using interpolation to render
+   *
+   * @param  {string}  template           The template
+   * @param  {any}     [templateVars={}]  The template variables
+   *
+   * @return {string}  Rendered template
+   */
+  renderAsTemplateString(template: string, templateVars: any = {}): string {
+    const data = { _indent: this.indent, ...this.env, ...templateVars };
+
+    const contentHash = createHash('md5').update(template).digest('base64');
+
+    if (!this.cache[contentHash]) {
+      const params = Object.keys(data).join(', ');
+      const indenter = typeof data._indent === 'function' ? '_indent' : '';
+      this.cache[contentHash] = new Function('data', `return ((${params}) => ${indenter}\`${template}\`)(...Object.values(data));`);
+    }
+
+    return this.cache[contentHash](data);
+  }
+
+  private indent(strings: string[], ...templateVars: string[]): string {
+    let result = '';
+    for (let i = 0; i < strings.length; ++i) {
+      let arg = templateVars?.[i];
+      if (typeof arg === 'string' && arg?.indexOf?.('\n') !== -1) {
+        const indent = (strings[i]?.replace?.(/.*\n/g, '') ?? '')?.length;
+        if (indent) {
+          arg = arg.replace(/\n+/g, `\n${' '.repeat(indent)}`);
         }
       }
+      result += `${strings[i] ?? ''}${arg ?? ''}`;
     }
 
-    node.resolve();
-
-    // TODO: add option to limit promise stack when rendering the nodes (a->[b,c]->[[d,e],[f,g]]->...)
-    await Promise.all(node.children.map((child) => this.render(opt, child)));
-  }
-
-  /**
-   * { function_description }
-   */
-  private registerDefaultHandlers(): void {
-    this.registerKeyHandler('each', (node) => {
-      return Promise.all(node.args?.values?.map?.((v: string) => node.generate(v)));
-    });
-
-    this.registerKeyHandler('dirname', (node) => {
-      return node.generate((prev) => node.name.replace('{dirname}', basename(prev)));
-    });
+    return result;
   }
 }

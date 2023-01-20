@@ -1,122 +1,96 @@
 import { promises } from 'fs';
+import { join, resolve } from 'path';
 import { CliOptions } from './cli';
-import { collectRecipeHooks, fetchSource, FNode, Handler, LoggingService, parseRecipeFile, Recipe, Renderer, SourceOptions, tree } from './lib';
+import { LoggingService, Recipe, RecipeSchema, validateRecipes } from './lib';
+import { RecipeRuntimeError } from './lib/errors';
+import { LogBuffer } from './log-utils';
 
-const logger = new LoggingService('fst');
+const logger = new LoggingService();
 
-/**
- * { function_description }
- *
- * @param  {Recipe[]}  recipes              The recipes
- * @param  {}          options?:CliOptions  The options cli options
- *
- * @return {Handler}   { description_of_the_return_value }
- */
-export const recipeHandler =
-  (recipes: Recipe[], options?: CliOptions): Handler =>
-  async (node: FNode): Promise<void> => {
-    node.outputs.forEach((output) => recipes.push(...parseRecipeFile(output, options)));
-  };
-
-/**
- * { function_description }
- *
- * @param {Recipe}            recipe                             The recipe
- * @param {Handler}           handler                            The handler
- * @param {(Array|string[])}  sourceDirs                         The source dirs
- * @param {<type>}            options?:CliOptions&SourceOptions  The options cli options source options
- */
-export const runRecipe = async (recipe: Recipe, handler: Handler, sourceDirs: string[], options?: CliOptions & SourceOptions) => {
-  logger.debug({ recipe });
-
-  if (!recipe.from) {
+const cleanup = async (tempDirs: string[], cache: boolean) => {
+  if (cache) {
     return;
   }
 
-  collectRecipeHooks(recipe);
-
-  const source = await fetchSource(recipe.from, { subdirs: recipe.includeDirs, cache: options?.cache });
-  if (recipe.type == 'repo' || recipe.type == 'remote') {
-    sourceDirs.push(source);
-  }
-
-  await Promise.all(recipe.before?.map?.((callback) => callback(recipe)));
-
-  const root = await tree(source, { exclude: recipe.excludeDirs });
-
-  const renderer = new Renderer(root, recipe.to);
-  if (options?.recursive || recipe.recursive) {
-    renderer.registerFilenameHandler('.fstr.json', handler);
-    renderer.registerFilenameHandler('.fstr.js', handler);
-  }
-
-  await Promise.all(recipe.prerender?.map?.((callback) => callback(recipe, renderer)));
-
-  await renderer.render();
-
-  await Promise.all(recipe.after?.map?.((callback) => callback(recipe)));
+  await Promise.all(tempDirs.map((dir) => promises.rm(dir, { recursive: true, force: true }).catch(() => null)));
+  await promises.rm(join(process.cwd(), '.fst'), { recursive: true, force: true });
 };
 
-/**
- * { function_description }
- *
- * @param  {Recipe[]}       recipes              The recipes
- * @param  {Handler}        handler              The handler
- * @param  {string[]}       sourceDirs           The source dirs
- * @param  {}               options?:CliOptions  The options cli options
- *
- * @return {Promise<void>}  { description_of_the_return_value }
- */
-export const runRecipes = async (recipes: Recipe[], handler: Handler, sourceDirs: string[], options?: CliOptions): Promise<void> => {
+const runBatch = (recipes: Recipe[], batch: Recipe[], options: CliOptions, tempDirs: string[], logBuffer: LogBuffer) => {
+  return batch.map(async (recipe) => {
+    if (!recipe.parse()) {
+      return true;
+    }
+
+    const sources = await recipe.run(options);
+    // re-queue if it's waiting for something
+    if (sources === null) {
+      recipes.push(recipe);
+
+      return false;
+    }
+
+    tempDirs.push(...sources);
+
+    for (const child of recipe.recipes || []) {
+      const childRecipe = new Recipe(child, recipe.map, { output: recipe.to, previousOutput: recipe.to });
+      recipes.push(childRecipe);
+      logBuffer.add(childRecipe.logger);
+    }
+
+    return true;
+  });
+};
+
+const runRecipes = async (recipes: Recipe[], tempDirs: string[], options?: CliOptions): Promise<void> => {
   const maxConcurrent = options.parallel || 10;
+  const logBuffer = new LogBuffer(!!options?.buffered);
+
+  await logBuffer.init(recipes.map(({ logger }) => logger));
 
   while (recipes.length) {
-    const batch = recipes.splice(0, maxConcurrent).map(async (recipe) => {
-      await runRecipe(recipe, handler, sourceDirs, options);
+    validateRecipes(recipes);
 
-      if (recipe.recipes?.length) {
-        recipes.push(...recipe.recipes);
-      }
-    });
+    const batch = recipes.splice(0, maxConcurrent);
+    const processed = await Promise.all(runBatch(recipes, batch, options, tempDirs, logBuffer));
 
-    await Promise.all(batch);
+    if (processed.find(Boolean) || recipes.find((r) => !r.parsed)) {
+      continue;
+    }
+
+    logger.error(JSON.stringify({ message: 'Unmet dependencies', recipes }, null, 2));
+    throw new RecipeRuntimeError('Unmet dependencies');
   }
+
+  logBuffer.complete();
 };
 
-/**
- * TODO: support inline recipes
- * export const fst = async (pathlike: (string | RecipeSchema)[], options?: CliOptions): Promise<void> => {
- *
- * { function_description }
- *
- * @param  {string[]}       pathlike             The pathlike
- * @param  {}               options?:CliOptions  The options cli options
- *
- * @return {Promise<void>}  { description_of_the_return_value }
- */
-export const fst = async (pathlike: string[], options?: CliOptions): Promise<void> => {
-  options = options || {};
+export const fst = async (schemas: RecipeSchema[], options?: CliOptions): Promise<void> => {
+  const start = Date.now();
+  const output = resolve(options.output || process.cwd());
 
-  const recipes = [];
-  const sourceDirs: string[] = [];
-  let handler: Handler = null;
+  const recipes: Recipe[] = [];
+  const tempDirs: string[] = [];
+  const map: Record<string, Recipe> = {};
 
   try {
-    for (const file of pathlike) {
-      recipes.push(...parseRecipeFile(file, options));
+    for (const schema of schemas) {
+      if (Array.isArray(schema)) {
+        recipes.push(...schema.map((s) => new Recipe(s, map, { output })));
+      } else {
+        recipes.push(new Recipe(schema, map, { output }));
+      }
     }
-    logger.log('fst parsed input', logger.blu(JSON.stringify({ recipes }, null, 2)));
+    logger.log('fst parsed input', logger.blu(JSON.stringify(recipes, null, 2)));
 
-    handler = recipeHandler(recipes, options);
-
-    await runRecipes(recipes, handler, sourceDirs, options);
+    await runRecipes(recipes, tempDirs, options);
   } catch (e) {
-    logger.trace('Error parsing recipes\n', e, '\n', JSON.stringify({ sourceDirs, recipes }));
+    logger.trace('Error parsing recipes\n', e, '\n', JSON.stringify({ tempDirs, recipes }));
+    await cleanup(tempDirs, options?.cache);
+    throw e;
   }
 
-  if (!options?.cache) {
-    await Promise.all(sourceDirs.map((dir) => promises.rmdir(dir).catch(() => null)));
-  }
+  await cleanup(tempDirs, options?.cache);
 
-  return null;
+  logger.log(`Finished (${Date.now() - start}ms)`);
 };
