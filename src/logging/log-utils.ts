@@ -1,4 +1,4 @@
-import { LoggingService, StreamEvent } from './lib';
+import { LoggingService, StreamEvent } from './logging.service';
 
 export class LogBuffer {
   logs: LoggingService[];

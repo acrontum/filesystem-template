@@ -1,7 +1,7 @@
 import { promises } from 'fs';
 import { basename, extname, join } from 'path';
+import { LoggingService } from '../logging';
 import { RecipeRuntimeError } from './errors';
-import { LoggingService } from './logging.service';
 
 export type PathGetter = (p?: string) => string;
 

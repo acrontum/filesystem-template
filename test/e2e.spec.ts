@@ -38,11 +38,11 @@ const recipe = (port: number): RecipeSchema => ({
           to: '../backend',
           from: getFixturePath('templates/extensions/backend'),
           scripts: {
-            after: [
-              'npm init --yes',
-              'npm i -D generate-it@5.50.1 2>/dev/null',
-              'npx generate-it --yes --template https://github.com/acr-lfr/generate-it-typescript-server#5.35.7 --mocked ../spec/latest.yml 2>/dev/null',
-            ].join(' && ')
+            after: `\
+              npm init --yes && \
+              npm i -D generate-it@5.50.1 2>/dev/null && \
+              npx generate-it --yes --template https://github.com/acr-lfr/generate-it-typescript-server#5.35.7 --mocked ../spec/latest.yml 2>/dev/null
+            `,
           },
           recipes: [
             {

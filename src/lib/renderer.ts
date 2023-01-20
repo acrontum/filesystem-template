@@ -52,7 +52,7 @@ export class Renderer {
 
   async renderTree(opt?: RenderOptions): Promise<void> {
     if (opt?.cleanFirst) {
-      await promises.rmdir(this.dest, { recursive: true });
+      await promises.rm(this.dest, { recursive: true, force: true });
     }
 
     await this.render([this.root]);

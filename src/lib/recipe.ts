@@ -2,9 +2,9 @@ import { exec, ExecOptions } from 'child_process';
 import { existsSync, promises, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { CliOptions } from '../cli';
+import { LoggingService, LogLevels } from '../logging';
 import { InvalidSchemaError } from './errors';
 import { fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
-import { LoggingService, LogLevels } from './logging.service';
 import { Renderer } from './renderer';
 
 export type RenderFunction = (recipe: Recipe, renderer: Renderer) => Promise<void> | void;
@@ -156,7 +156,7 @@ export class Recipe implements RecipeSchema {
       return sourceDirs;
     }
 
-    let source = await fetchSource(this.from, { subdirs: this.includeDirs, cache: options?.cache });
+    let source = await fetchSource(this.from, { subdirs: this.includeDirs, cache: options?.cache, packageRoot: options?.packageRoot });
     if (this.type == 'repo' || this.type == 'url') {
       sourceDirs.push(source);
     }

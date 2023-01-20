@@ -1,19 +1,20 @@
 import { exec as execCb } from 'child_process';
 import { fdir } from 'fdir';
-import { existsSync, promises } from 'fs';
+import { promises } from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { basename, dirname, join, resolve } from 'path';
 import { URL } from 'url';
 import { promisify } from 'util';
+import { LoggingService } from '../logging';
 import { RecipeRuntimeError } from './errors';
-import { LoggingService } from './logging.service';
 import { VirtualFile } from './virtual-file';
 
 export interface SourceOptions {
   root?: string;
   subdirs?: string[];
   cache?: boolean;
+  packageRoot?: string;
 }
 
 export interface TreeOptions {
@@ -33,9 +34,13 @@ export interface CacheInfo {
 }
 
 const logger = new LoggingService('file-utils');
-let packagePath: string;
-const cachedSourceFiles: Record<string, Promise<string>> = {};
 const exec = promisify(execCb);
+
+export const exists = (path: string): Promise<boolean> =>
+  promises
+    .access(path)
+    .then(() => true)
+    .catch(() => false);
 
 export const isRecipeFile = (file: string): boolean => {
   return /\.fstr\.js(on)?$/.test(file);
@@ -87,25 +92,29 @@ export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOption
   return root;
 };
 
+/**
+ * Recursively list all files. By default, node_modules and .git are excluded.
+ *
+ * @param  {string}            dir      Root dir to list
+ * @param  {string[]}          exclude  Array of paths to ignore
+ *
+ * @return {Promise<Group[]>}  An array of groups of folders and files
+ */
 export const listAllFiles = async (dir: string, exclude?: string[]): Promise<Group[]> => {
-  const ignored = exclude || ['.git', 'node_modules'];
+  const ignore: Record<string, boolean> = (exclude || ['.git', 'node_modules']).reduce((acc, dir) => ({ ...acc, [dir]: true }), {});
 
   const files = (await new fdir()
     .crawlWithOptions(dir, {
       includeBasePath: true,
       group: true,
-      exclude: (dirname: string) => ignored.includes(dirname),
+      exclude: (dirname: string) => ignore[dirname],
     })
     .withPromise()) as Group[];
 
   return files.sort((a, b) => a.dir.localeCompare(b.dir));
 };
 
-export const getProjectRoot = (): string => {
-  if (packagePath) {
-    return packagePath;
-  }
-
+export const getProjectRoot = async (): Promise<string> => {
   let max = parseInt(process.env.FST_PACKAGE_HEIGHT, 10);
   if (typeof max !== 'number' || Number.isNaN(max)) {
     max = 10;
@@ -113,24 +122,23 @@ export const getProjectRoot = (): string => {
 
   let current: string = process.env.npm_package_json || '.';
 
-  while (max-- && !existsSync(current)) {
+  while (max-- && !(await exists(current))) {
     current = join(dirname(dirname(current)), 'package.json');
   }
 
   if (max <= 0) {
-    packagePath = process.cwd();
-    logger.warn(`project root not found, using ${packagePath} - consider increasing env var FST_PACKAGE_HEIGHT (was ${max})`);
-  } else {
-    packagePath = dirname(current);
+    logger.warn(`project root not found, using '${process.cwd()}' - consider increasing env var FST_PACKAGE_HEIGHT (was '${max}')`);
+
+    return process.cwd();
   }
 
-  return packagePath;
+  return dirname(current);
 };
 
 export const fetchSource = async (pathlike: string, options?: SourceOptions): Promise<string> => {
   options = options || {};
 
-  if (existsSync(pathlike)) {
+  if (await exists(pathlike)) {
     logger.log(`will copy ${logger.grn(pathlike)}`);
 
     return pathlike;
@@ -144,24 +152,22 @@ export const fetchSource = async (pathlike: string, options?: SourceOptions): Pr
     throw new RecipeRuntimeError(`file not found ${pathlike}`);
   }
 
-  const cache = getChacheInfo(url);
-  if (cachedSourceFiles[cache?.path]) {
+  const cache = await getChacheInfo(url, options?.packageRoot);
+  if (await exists(cache?.path)) {
     logger.log(`cache hit on ${cache?.path}`);
 
-    return cachedSourceFiles[cache?.path];
+    return cache?.path;
   }
 
   if (isRepo(url.pathname)) {
-    cachedSourceFiles[cache?.path] = fetchRepo(cache, options);
-  } else {
-    cachedSourceFiles[cache?.path] = fetchFileFromUrl(url, cache, options);
+    return fetchRepo(cache, options);
   }
 
-  return cachedSourceFiles[cache?.path];
+  return fetchFileFromUrl(url, cache, options);
 };
 
-export const getChacheInfo = (url: URL): CacheInfo => {
-  const projectDir = getProjectRoot();
+export const getChacheInfo = async (url: URL, packageRoot: string): Promise<CacheInfo> => {
+  const projectDir = packageRoot || (await getProjectRoot());
 
   if (!isRepo(url.pathname)) {
     const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
@@ -180,7 +186,7 @@ export const getChacheInfo = (url: URL): CacheInfo => {
 export const fetchFileFromUrl = async (url: URL, cacheInfo: CacheInfo, options?: SourceOptions): Promise<string> => {
   const output = resolve(cacheInfo.path);
 
-  if (options?.cache && existsSync(output)) {
+  if (options?.cache && (await exists(output))) {
     logger.info(`will copy ${logger.grn(output)} (cached)`);
 
     return output;
@@ -215,7 +221,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
   let branch = cacheInfo.branch;
   const { path: repo, origin, repoName } = cacheInfo;
 
-  if (options?.cache && existsSync(repo)) {
+  if (options?.cache && (await exists(repo))) {
     logger.info(`will copy repo ${logger.grn(repoName)} (cached)`);
 
     return repo;
@@ -228,7 +234,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
   try {
     await promises.mkdir(repo, { recursive: true });
 
-    if (!existsSync(join(cwd, '.git'))) {
+    if (!(await exists(join(cwd, '.git')))) {
       await exec('git init', { cwd });
       await exec(`git remote add -f origin ${origin}`, { cwd });
     }
@@ -253,7 +259,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
 
     return repo;
   } catch (e) {
-    await promises.rmdir(repo, { recursive: true, force: true } as any).catch(() => null);
+    await promises.rm(repo, { recursive: true, force: true } as any).catch(() => null);
     throw e;
   }
 };

@@ -1,9 +1,8 @@
 import { promises } from 'fs';
 import { join, resolve } from 'path';
 import { CliOptions } from './cli';
-import { LoggingService, Recipe, RecipeSchema, validateRecipes } from './lib';
-import { RecipeRuntimeError } from './lib/errors';
-import { LogBuffer } from './log-utils';
+import { RecipeRuntimeError, getProjectRoot, Recipe, RecipeSchema, validateRecipes } from './lib';
+import { LogBuffer, LoggingService } from './logging';
 
 const logger = new LoggingService();
 
@@ -16,13 +15,13 @@ const cleanup = async (tempDirs: string[], cache: boolean) => {
   await promises.rm(join(process.cwd(), '.fst'), { recursive: true, force: true });
 };
 
-const runBatch = (recipes: Recipe[], batch: Recipe[], options: CliOptions, tempDirs: string[], logBuffer: LogBuffer) => {
+const runBatch = (options: CliOptions, tempDirs: string[], logBuffer: LogBuffer, packageRoot: string) => (recipes: Recipe[], batch: Recipe[]) => {
   return batch.map(async (recipe) => {
     if (!recipe.parse()) {
       return true;
     }
 
-    const sources = await recipe.run(options);
+    const sources = await recipe.run({ ...options, packageRoot });
     // re-queue if it's waiting for something
     if (sources === null) {
       recipes.push(recipe);
@@ -45,6 +44,7 @@ const runBatch = (recipes: Recipe[], batch: Recipe[], options: CliOptions, tempD
 const runRecipes = async (recipes: Recipe[], tempDirs: string[], options?: CliOptions): Promise<void> => {
   const maxConcurrent = options.parallel || 10;
   const logBuffer = new LogBuffer(!!options?.buffered);
+  const batcher = runBatch(options, tempDirs, logBuffer, await getProjectRoot());
 
   await logBuffer.init(recipes.map(({ logger }) => logger));
 
@@ -52,7 +52,7 @@ const runRecipes = async (recipes: Recipe[], tempDirs: string[], options?: CliOp
     validateRecipes(recipes);
 
     const batch = recipes.splice(0, maxConcurrent);
-    const processed = await Promise.all(runBatch(recipes, batch, options, tempDirs, logBuffer));
+    const processed = await Promise.all(batcher(recipes, batch));
 
     if (processed.find(Boolean) || recipes.find((r) => !r.parsed)) {
       continue;

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import 'source-map-support/register';
 import { resolve } from 'path';
+import 'source-map-support/register';
 import { fst } from './index';
-import { LoggingService, RecipeOptions } from './lib';
+import { RecipeOptions } from './lib';
 import { CliError } from './lib/errors';
+import { LoggingService } from './logging';
 
 export interface CliOptions extends RecipeOptions {
   buffered?: boolean;
