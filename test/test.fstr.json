@@ -1,5 +1,0 @@
-{
-  "from": "trees/less-simple",
-  "to": "out",
-  "hooks": ["fstr-files"]
-}
