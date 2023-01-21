@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "repository": "https://github.com/acrontum/filesystem-template",
   "description": "Filesystem templating engine and project scaffolding tool",
-  "main": "dist/src/index.js",
+  "main": "./dist/src/cli.js",
   "bin": {
     "fst": "./dist/src/cli.js"
   },
@@ -11,8 +11,8 @@
     "preinstall": "git config core.hooksPath ./hooks",
     "build": "tsc -p .",
     "watch": "npm run build -- --watch --preserveWatchOutput",
-    "fst": "ln -s $PWD/dist/src/cli.js $PWD/node_modules/.bin/fst",
     "fmt": "prettier --write 'src/**/*.ts' 'test/*.ts'",
+    "link": "ln -s $PWD/dist/src/cli.js ./node_modules/.bin/fst && chmod +x node_modules/.bin/fst",
     "pretest": "rm -rf .fst test-output; test -d dist || npm run build",
     "test": "FST_LOG=${FST_LOG:-error} NODE_ENV=test mocha -r source-map-support/register --recursive 'dist/test/**/*.spec.js'"
   },
@@ -40,7 +40,6 @@
     "prettier": "^2.3.2",
     "sinon": "^11.1.2",
     "source-map-support": "^0.5.21",
-    "tsc-watch": "^5.0.2",
     "typescript": "^4.4.2"
   }
 }
