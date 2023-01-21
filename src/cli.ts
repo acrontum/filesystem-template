@@ -136,7 +136,7 @@ export class Program {
 const logger = new LoggingService('cli');
 
 const getProgram = () => {
-  return new Program('fst [options | RECIPE]')
+  return new Program('fst <options | RECIPE>')
     .set('--cache', {
       onOption: () => true,
       alias: '-c',
@@ -208,7 +208,6 @@ const programToOptions = (program: Program): CliOptions => {
   return {
     buffered: program.get('buffered'),
     help: program.get('help'),
-    recipe: program.get('recipe'),
     verbose: program.get('verbose'),
     silent: program.get('silent'),
     cache: program.get('cache'),
@@ -247,7 +246,7 @@ export const cli = async () => {
   logger.debug({ program });
 
   const recipes = cliRecipes.map((from) => {
-    if (from[0] !== '{' && from[0] !== '[') {
+    if (from[0] !== '{') {
       try {
         return require(resolve(from));
       } catch (e) {
@@ -261,6 +260,7 @@ export const cli = async () => {
       return { from };
     }
   });
+
   await fst(recipes, programToOptions(program));
 };
 

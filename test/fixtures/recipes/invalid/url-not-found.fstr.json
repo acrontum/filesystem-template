@@ -1,7 +1,5 @@
-[
-  {
-    "name": "404",
-    "from": "http://localhost:9102/fstr/thing.fstr.json",
-    "to": "url"
-  }
-]
+{
+  "name": "404",
+  "from": "http://localhost:9102/fstr/thing.fstr.json",
+  "to": "url"
+}

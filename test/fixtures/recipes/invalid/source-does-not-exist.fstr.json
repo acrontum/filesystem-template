@@ -1,6 +1,4 @@
-[
-  {
-    "name": "source not found",
-    "from": "path/does/not/exist/test.fstr.json"
-  }
-]
+{
+  "name": "source not found",
+  "from": "path/does/not/exist/test.fstr.json"
+}

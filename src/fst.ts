@@ -75,11 +75,7 @@ export const fst = async (schemas: RecipeSchema[], options?: CliOptions): Promis
 
   try {
     for (const schema of schemas) {
-      if (Array.isArray(schema)) {
-        recipes.push(...schema.map((s) => new Recipe(s, map, { output })));
-      } else {
-        recipes.push(new Recipe(schema, map, { output }));
-      }
+      recipes.push(new Recipe(schema, map, { output }));
     }
     logger.log('fst parsed input', logger.blu(JSON.stringify(recipes, null, 2)));
 

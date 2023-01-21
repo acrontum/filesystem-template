@@ -25,7 +25,7 @@ describe(relative(process.cwd(), __filename), () => {
   });
 
   const runAndExpectError = async (file: string, errMessage: string): Promise<any> => {
-    const err = await fst(getFixture(file), { output: testOutDir }).catch((e) => e);
+    const err = await fst([getFixture(file)], { output: testOutDir }).catch((e) => e);
     expect(`${err.name ? `${err.name}: ` : ''}${err.message}`).to.equal(errMessage);
 
     return err;
@@ -64,9 +64,12 @@ describe(relative(process.cwd(), __filename), () => {
     await runAndExpectError('recipes/invalid/unmet-dependency.fstr.json', 'RecipeRuntimeError: Unmet dependencies');
   });
 
+  it('validates no top-level array', async () => {
+    await runAndExpectError('recipes/invalid/top-level-array.fstr.json', 'InvalidSchemaError: schema top level cannot be array');
+  });
+
   it('validates url-invalid.fstr.json', async () => {
     const err = await runAndExpectError('recipes/invalid/url-invalid.fstr.json', 'Failed to fetch from URL');
-
     expect(err.error.message).to.equal('getaddrinfo ENOTFOUND xyz.n');
   });
 

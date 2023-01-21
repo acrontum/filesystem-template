@@ -1,7 +1,5 @@
-[
-  {
-    "name": "enotfound",
-    "from": "http://xyz.n/scriptsx/thing.fstr.json",
-    "to": "url"
-  }
-]
+{
+  "name": "enotfound",
+  "from": "http://xyz.n/scriptsx/thing.fstr.json",
+  "to": "url"
+}

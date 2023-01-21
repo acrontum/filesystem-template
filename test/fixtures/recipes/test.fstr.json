@@ -1,60 +1,66 @@
-[
-  {
-    "name": "prep",
-    "scripts": {
-      "before": "mkdir -p url/test/fixtures"
+{
+  "recipes": [
+    {
+      "name": "prep",
+      "scripts": {
+        "before": "mkdir -p url/test/fixtures"
+      },
+      "recipes": [
+        {
+          "name": "url containing fst-test",
+          "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
+          "to": "url"
+        }
+      ]
     },
-    "recipes": [
-      {
-        "name": "url containing fst-test",
-        "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
-        "to": "url"
-      }
-    ]
-  },
-  {
-    "name": "nested",
-    "to": "nested/asdf/",
-    "scripts": {
-      "after": "echo '[{ \"name\": \"echod\", \"scripts\": { \"after\": \"echo 'i am blocking something' && touch asdf.txt && sleep 3\" },\"recipes\":[{\"name\":\"pew\",\"scripts\":{\"before\":\"sleep 1 && touch xyz.txt\"}}] }]' > was-echo.fstr.json"
-    },
-    "recipes": [
-      {
-        "name": "running nested output",
-        "from": "was-echo.fstr.json",
-        "recipes": [
-          {
-            "name": "something",
-            "depends": ["echod"],
-            "scripts": {
-              "before": "echo 'if this prints, I have been unblocked!'"
+    {
+      "name": "nested",
+      "to": "nested/asdf/",
+      "scripts": {
+        "after": "echo '[{ \"name\": \"echod\", \"scripts\": { \"after\": \"echo 'i am blocking something' && touch asdf.txt && sleep 3\" },\"recipes\":[{\"name\":\"pew\",\"scripts\":{\"before\":\"sleep 1 && touch xyz.txt\"}}] }]' > was-echo.fstr.json"
+      },
+      "recipes": [
+        {
+          "name": "running nested output",
+          "from": "was-echo.fstr.json",
+          "recipes": [
+            {
+              "name": "something",
+              "depends": [
+                "echod"
+              ],
+              "scripts": {
+                "before": "echo 'if this prints, I have been unblocked!'"
+              }
             }
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "name": "nothing really",
-    "to": "to",
-    "recipes": [
-      {
-        "name": "a nested recipe",
-        "to": "nested"
-      }
-    ],
-    "data": {}
-  },
-  {
-    "name": "local fixtures",
-    "from": "test/fixtures",
-    "to": "to",
-    "depends": ["prep"],
-    "recipes": [],
-    "scripts": {
-      "before": "echo before",
-      "after": "echo after"
+          ]
+        }
+      ]
     },
-    "data": {}
-  }
-]
+    {
+      "name": "nothing really",
+      "to": "to",
+      "recipes": [
+        {
+          "name": "a nested recipe",
+          "to": "nested"
+        }
+      ],
+      "data": {}
+    },
+    {
+      "name": "local fixtures",
+      "from": "test/fixtures",
+      "to": "to",
+      "depends": [
+        "prep"
+      ],
+      "recipes": [],
+      "scripts": {
+        "before": "echo before",
+        "after": "echo after"
+      },
+      "data": {}
+    }
+  ]
+}

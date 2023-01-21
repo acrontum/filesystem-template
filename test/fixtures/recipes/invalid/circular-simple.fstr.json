@@ -1,10 +1,16 @@
-[
-  {
-    "name": "after you, A",
-    "depends": ["after you, B"]
-  },
-  {
-    "name": "after you, B",
-    "depends": ["after you, A"]
-  }
-]
+{
+  "recipes": [
+    {
+      "name": "after you, A",
+      "depends": [
+        "after you, B"
+      ]
+    },
+    {
+      "name": "after you, B",
+      "depends": [
+        "after you, A"
+      ]
+    }
+  ]
+}

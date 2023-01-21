@@ -1,14 +1,22 @@
-[
-  {
-    "name": "a",
-    "depends": ["b"]
-  },
-  {
-    "name": "b",
-    "depends": ["c"]
-  },
-  {
-    "name": "c",
-    "depends": ["a"]
-  }
-]
+{
+  "recipes": [
+    {
+      "name": "a",
+      "depends": [
+        "b"
+      ]
+    },
+    {
+      "name": "b",
+      "depends": [
+        "c"
+      ]
+    },
+    {
+      "name": "c",
+      "depends": [
+        "a"
+      ]
+    }
+  ]
+}

@@ -25,9 +25,7 @@ export interface RecipeSchema {
 export interface RecipeOptions {
   output?: string;
   previousOutput?: string;
-  // recursive?: boolean;
   // include?: string[];
-  // imports?: string[];
   // cache?: boolean;
   // parallel?: number;
 }
@@ -191,6 +189,9 @@ export class Recipe implements RecipeSchema {
 
   private loadSchema(schema: RecipeSchema, options: RecipeOptions): this {
     this.schema = JSON.parse(JSON.stringify(schema));
+    if (Array.isArray(this.schema)) {
+      throw new InvalidSchemaError('schema top level cannot be array');
+    }
     this.name = schema.name || schema.from || schema.to || 'unnamed recipe';
 
     this.data = schema.data;

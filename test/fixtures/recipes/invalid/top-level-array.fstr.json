@@ -1,0 +1,12 @@
+[
+  {
+    "name": "hi",
+    "from": "./test",
+    "to": "./output"
+  },
+  {
+    "name": "hi again",
+    "from": "./test",
+    "to": "./output-again"
+  }
+]
