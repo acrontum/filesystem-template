@@ -32,7 +32,7 @@ const runBatch = (options: CliOptions, tempDirs: string[], logBuffer: LogBuffer,
     tempDirs.push(...sources);
 
     for (const child of recipe.recipes || []) {
-      const childRecipe = new Recipe(child, recipe.map, { output: recipe.to, previousOutput: recipe.to });
+      const childRecipe = new Recipe(child, recipe.map, { ...options, output: recipe.to, previousOutput: recipe.to });
       recipes.push(childRecipe);
       logBuffer.add(childRecipe.logger);
     }
@@ -67,7 +67,8 @@ const runRecipes = async (recipes: Recipe[], tempDirs: string[], options?: CliOp
 
 export const fst = async (schemas: RecipeSchema[], options?: CliOptions): Promise<void> => {
   const start = Date.now();
-  const output = resolve(options.output || process.cwd());
+  options = options || {};
+  const output = resolve(options?.output || process.cwd());
 
   const recipes: Recipe[] = [];
   const tempDirs: string[] = [];
@@ -75,7 +76,7 @@ export const fst = async (schemas: RecipeSchema[], options?: CliOptions): Promis
 
   try {
     for (const schema of schemas) {
-      recipes.push(new Recipe(schema, map, { output }));
+      recipes.push(new Recipe(schema, map, { ...options, output }));
     }
     logger.log('fst parsed input', logger.blu(JSON.stringify(recipes, null, 2)));
 

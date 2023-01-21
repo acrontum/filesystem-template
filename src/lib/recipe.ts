@@ -25,6 +25,7 @@ export interface RecipeSchema {
 export interface RecipeOptions {
   output?: string;
   previousOutput?: string;
+  exclude?: string[];
   // include?: string[];
   // cache?: boolean;
   // parallel?: number;
@@ -202,17 +203,14 @@ export class Recipe implements RecipeSchema {
     this.scripts = schema.scripts;
     this.to = schema.to?.[0] === '/' ? schema.to : join(options.output || '.', schema.to || '.');
     this.previousOutput = options.previousOutput || process.cwd();
+    this.excludeDirs = (schema.excludeDirs || []).concat(options?.exclude);
+    this.includeDirs = schema.includeDirs;
     this.type = null;
 
     return this;
   }
 
   private tryParseUrl(): this {
-    if (/^git@.*:/.test(this.from)) {
-      this.from = `ssh://${this.from.replace(/:/g, '/')}.git`.replace('.git.git', '.git');
-      this.type = 'repo';
-    }
-
     const url = new URL(this.from);
     this.type = isRepo(url.pathname) ? 'repo' : 'url';
 

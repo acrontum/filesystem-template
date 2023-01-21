@@ -13,11 +13,11 @@ export const testOutDirname = 'test-output';
 
 export const testOutDir = resolve(`${__dirname}/../../../${testOutDirname}`);
 
-export const listFiles = async (path: string, removePrefix = false): Promise<string[]> => {
+export const listFiles = async (path: string, options: { removePrefix?: boolean }): Promise<string[]> => {
   const files = await listAllFiles(path);
 
   return files.reduce((acc, { files }) => {
-    if (removePrefix) {
+    if (options?.removePrefix) {
       files = files.map((file) => file.replace(path, ''));
     }
 

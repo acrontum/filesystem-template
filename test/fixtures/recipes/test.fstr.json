@@ -50,7 +50,7 @@
     },
     {
       "name": "local fixtures",
-      "from": "test/fixtures",
+      "from": "../test/fixtures",
       "to": "to",
       "depends": [
         "prep"

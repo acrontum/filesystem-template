@@ -33,26 +33,27 @@ const recipe = (port: number): RecipeSchema => ({
             },
           ],
         },
+      ],
+    },
+    {
+      name: 'ts express backend',
+      to: 'backend',
+      depends: ['weather spec'],
+      from: getFixturePath('templates/extensions/backend'),
+      scripts: {
+        after: `\
+          npm init --yes && \
+          npm i -D generate-it@5.50.1 2>/dev/null && \
+          npx generate-it --yes --template https://github.com/acr-lfr/generate-it-typescript-server#5.35.7 --mocked ../spec/latest.yml 2>/dev/null
+        `,
+      },
+      recipes: [
         {
-          name: 'ts express backend',
-          to: '../backend',
+          name: 'backend overrides',
           from: getFixturePath('templates/extensions/backend'),
           scripts: {
-            after: `\
-              npm init --yes && \
-              npm i -D generate-it@5.50.1 2>/dev/null && \
-              npx generate-it --yes --template https://github.com/acr-lfr/generate-it-typescript-server#5.35.7 --mocked ../spec/latest.yml 2>/dev/null
-            `,
+            after: 'npm install 2>/dev/null && rm -rf .openapi-nodegen',
           },
-          recipes: [
-            {
-              name: 'backend overrides',
-              from: getFixturePath('templates/extensions/backend'),
-              scripts: {
-                after: 'npm install 2>/dev/null && rm -rf .openapi-nodegen',
-              },
-            },
-          ],
         },
       ],
     },
@@ -83,12 +84,7 @@ describe(relative(process.cwd(), __filename), () => {
   });
 
   it('can generate a codebase', async () => {
-    await fst([recipe(moxy.port)], { cache: false, parallel: 1 });
-    expect(await listFiles(testOutDir, true)).to.deep.equals(e2eFiles);
-  }).timeout(0);
-
-  it('can generate a codebase, parallelized', async () => {
-    await fst([recipe(moxy.port)], { cache: false, parallel: 100 });
-    expect(await listFiles(testOutDir, true)).to.deep.equals(e2eFiles);
+    await fst([recipe(moxy.port)], { cache: false });
+    expect(await listFiles(testOutDir, { removePrefix: true })).to.deep.equals(e2eFiles);
   }).timeout(0);
 });

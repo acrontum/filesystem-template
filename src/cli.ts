@@ -15,6 +15,7 @@ export interface CliOptions extends RecipeOptions {
   silent?: string[];
   cache?: boolean;
   parallel?: number;
+  exclude?: string[];
 }
 
 export interface OptionCallback {
@@ -170,12 +171,6 @@ const getProgram = () => {
       help: ['RECIPE', 'Add recipe to builder (file or URL)'],
       default: [],
     })
-    .set('--recursive', {
-      onOption: () => true,
-      alias: '-R',
-      default: false,
-      help: 'Recursively seach for recipes',
-    })
     .set('--silent', {
       onOption: () => [''],
       alias: '-s',
@@ -186,39 +181,35 @@ const getProgram = () => {
       alias: '-v',
       help: 'Log more verbosely',
     })
-    .set('--dry-run', {
-      onOption: () => true,
-    })
     .set('--exclude', {
-      onOption: (arg) => (arg.option || []).concat(arg.args),
+      onOption: (arg) => (arg.option || []).concat(arg.args[0].split(',').map((x: string) => x.trim())),
       alias: '-e',
-      help: ['PATH', 'Skip PATH in template generation'],
+      help: ['PATHS', 'Skip PATHS in template generation (default node_modules,.git)'],
       positional: 1,
     })
-    .set('--buffered', {
+    .set('--no-buffer', {
       onOption: () => true,
       alias: '-b',
-      help: 'Buffer log output',
-      default: false,
+      help: 'Disable log buffering (default true unless not tty, CI=true, or TERM=dumb)',
+      default: logger.useEscapeCodes(process.stdout.isTTY),
       positional: 0,
     });
 };
 
 const programToOptions = (program: Program): CliOptions => {
-  return {
-    buffered: program.get('buffered'),
-    help: program.get('help'),
-    verbose: program.get('verbose'),
-    silent: program.get('silent'),
-    cache: program.get('cache'),
-    parallel: program.get('parallel'),
-    output: program.get('output'),
-  };
+  return ['buffered', 'help', 'verbose', 'silent', 'cache', 'parallel', 'output', 'exclude'].reduce((options, option) => {
+    const value = program.get(option);
+    if (typeof value !== 'undefined') {
+      options[option] = value;
+    }
+
+    return options;
+  }, {} as Record<string, any>);
 };
 
-export const cli = async () => {
+export const cli = async (args: string[]) => {
   const program = getProgram();
-  const err = program.consume(process.argv.slice(2));
+  const err = program.consume(args.slice());
 
   if (err) {
     console.error(`${err.message}\n\n${program.usage()}`);
@@ -265,5 +256,5 @@ export const cli = async () => {
 };
 
 if (require.main === module) {
-  cli().catch((e) => console.error(e));
+  cli(process.argv.slice(2)).catch((e) => console.error(e));
 }

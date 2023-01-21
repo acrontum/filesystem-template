@@ -94,12 +94,12 @@ export class LoggingService {
     return LogLevels[this.level ?? (process.env.FST_LOG as keyof typeof LogLevels)];
   }
 
-  private colour(escape: string, message: string, isTty: boolean = true): string {
-    return this.useEscapeCodes(isTty) ? `${escape}${message}\x1b[0;0m` : message;
+  useEscapeCodes(isTty: boolean): boolean {
+    return process.env.TERM !== 'dumb' && process.env.CI !== 'true' && isTty;
   }
 
-  private useEscapeCodes(isTty: boolean): boolean {
-    return process.env.TERM !== 'dumb' && process.env.CI !== 'true' && isTty;
+  private colour(escape: string, message: string, isTty: boolean = true): string {
+    return this.useEscapeCodes(isTty) ? `${escape}${message}\x1b[0;0m` : message;
   }
 
   private logIfAble(level: keyof typeof LogLevels, ...args: any[]): void {
