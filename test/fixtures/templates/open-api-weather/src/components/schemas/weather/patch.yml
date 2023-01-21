@@ -1,0 +1,9 @@
+{{
+  extend('./model.yml', {
+    require: [
+      'properties.date',
+      'properties.location',
+      'properties.temperature'
+    ]
+  })
+}}

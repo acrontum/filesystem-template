@@ -1,4 +1,4 @@
-out
 node_modules
 dist
 .fst
+test-output

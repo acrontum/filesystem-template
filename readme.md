@@ -1,7 +1,5 @@
 # filesystem-template
 
-blurb
-
 ---
 
 ## Usage
@@ -22,15 +20,17 @@ See `npx fst --help` for more options, or see [API](#api).
 
 
 ```typescript
-interface Recipe {
-  name?: string;
-  from?: string;
-  to?: string;
-  recipes?: Recipe[];
-  hooks?: string[];
-  recursive?: boolean;
-  includeDirs?: string[];
-  excludeDirs?: string[];
+interface RecipeSchema {
+  data?: any;                                     // arbitrary data store
+  depends?: string[];                             // array of names of other recipes which must be built first
+  excludeDirs?: string[];                         // list of folders to skip when copying or generating
+  fileHandler?: string | RenderFunction;          // path to render handler js file or handler function
+  from?: string;                                  // file, recipe, path to file(s), url, or repository to fetch templates from
+  includeDirs?: string[];                         // when cloning, only clone certain folders
+  name?: string;                                  // unique name of the recipe (for use with depends and passing data between files)
+  recipes?: RecipeSchema[];                       // dependent / sub recipes
+  scripts?: { before?: string; after?: string };  // lifecycle cli / shell commands
+  to?: string;                                    // output folder
 }
 ```
 
@@ -189,3 +189,11 @@ exports.before = async () => {
 
 Try:  
 `npx fst --help`
+
+
+## Roadmap
+
+-[] write more tests
+-[] update docs
+-[] re-implement cli params (include / exclude files, cache, parallel, etc)
+-[] re-implement recipe params (include / exclude files, cache, parallel, etc)

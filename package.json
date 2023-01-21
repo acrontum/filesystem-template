@@ -3,16 +3,19 @@
   "version": "0.0.2",
   "repository": "https://github.com/acrontum/filesystem-template",
   "description": "Filesystem templating engine and project scaffolding tool",
-  "main": "dist/src/index.js",
+  "main": "./dist/src/cli.js",
   "bin": {
     "fst": "./dist/src/cli.js"
   },
   "scripts": {
+    "preinstall": "git config core.hooksPath ./hooks",
     "build": "tsc -p .",
-    "watch": "tsc-watch -p . --onSuccess 'echo done'",
-    "fmt": "prettier --write src/**/*.ts",
-    "pretest": "rm -rf .fst test/out",
-    "test": "NODE_ENV=test node dist/src/cli.js -r test/test.fstr.json"
+    "watch": "npm run build -- --watch --preserveWatchOutput",
+    "fmt": "prettier --write 'src/**/*.ts' 'test/*.ts'",
+    "link": "ln -s $PWD/dist/src/cli.js ./node_modules/.bin/fst && chmod +x node_modules/.bin/fst",
+    "pretest": "rm -rf .fst test-output; test -d dist || npm run build",
+    "test:unit": "npm run test -- --ignore '**/e2e.spec.js'",
+    "test": "FST_LOG=${FST_LOG:-error} NODE_ENV=test mocha -r source-map-support/register --recursive 'dist/test/**/*.spec.js'"
   },
   "files": [
     "dist",
@@ -23,13 +26,21 @@
   "author": "p-mcgowan",
   "license": "MIT",
   "dependencies": {
-    "fdir": "^5.0.0"
+    "fdir": "5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^14.14.14",
-    "prettier": "^2.2.1",
-    "source-map-support": "^0.5.19",
-    "tsc-watch": "^5.0.2",
-    "typescript": "^4.1.3"
+    "@acrontum/moxy": "^2.1.1",
+    "@tsconfig/node16": "^1.0.2",
+    "@types/chai": "^4.2.21",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^16.7.12",
+    "@types/sinon": "^10.0.2",
+    "@types/source-map-support": "^0.5.6",
+    "chai": "^4.3.4",
+    "mocha": "^9.1.3",
+    "prettier": "^2.3.2",
+    "sinon": "^11.1.2",
+    "source-map-support": "^0.5.21",
+    "typescript": "^4.4.2"
   }
 }

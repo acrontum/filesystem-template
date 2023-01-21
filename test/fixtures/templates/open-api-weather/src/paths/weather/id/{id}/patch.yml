@@ -1,0 +1,18 @@
+summary: weather data
+description: Update a weather entry
+parameters:
+  - $ref: '#/components/parameters/PathId'
+requestBody:
+  description: Subset of weather model to update
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '#/components/schemas/WeatherPatch'
+responses:
+  '200':
+    description: Updated
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Weather'

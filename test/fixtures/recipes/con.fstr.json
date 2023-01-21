@@ -1,0 +1,63 @@
+{
+  "recipes": [
+    {
+      "name": "A",
+      "scripts": {
+        "before": "echo before"
+      },
+      "recipes": [
+        {
+          "name": "G",
+          "from": "https://patmcgowan.dev/scripts/thing.fstr.json",
+          "to": "url"
+        }
+      ]
+    },
+    {
+      "name": "B",
+      "to": "nested/asdf/",
+      "scripts": {
+        "after": "echo '{ \"name\": \"I\", \"scripts\": { \"after\": \"echo 'i am blocking something' && touch asdf.txt && sleep 3\" } }' > nested.fstr.json"
+      },
+      "recipes": [
+        {
+          "name": "F",
+          "from": "nested.fstr.json",
+          "recipes": [
+            {
+              "name": "H",
+              "depends": [
+                "I"
+              ],
+              "scripts": {
+                "before": "echo 'if this prints, I have been unblocked!'"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C",
+      "to": "to",
+      "recipes": [
+        {
+          "name": "E",
+          "to": "nested"
+        }
+      ],
+      "data": {}
+    },
+    {
+      "name": "D",
+      "from": "../test/fixtures",
+      "to": "to",
+      "recipes": [],
+      "scripts": {
+        "before": "echo before",
+        "after": "echo after"
+      },
+      "data": {}
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+summary: weather data
+description: Get the latest temperatures
+parameters:
+  - $ref: '#/components/parameters/PathId'
+  - $ref: '#/components/parameters/QueryOffset'
+responses:
+  '200':
+    description: Successful fetch
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Weather'

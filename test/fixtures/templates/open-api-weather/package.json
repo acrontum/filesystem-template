@@ -1,0 +1,16 @@
+{
+  "name": "open-api-weather",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "NODE_ENV=test boats --yes -f helpers -i ./src/index.yml -o ./build/api.yml",
+    "postbuild": "cp build/api*.yml ./latest.yml"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "boats": "^3.4.0"
+  }
+}

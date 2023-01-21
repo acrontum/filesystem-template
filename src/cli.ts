@@ -1,128 +1,259 @@
 #!/usr/bin/env node
 
+import { resolve } from 'path';
+import 'source-map-support/register';
 import { fst } from './index';
-import { LoggingService, minimist } from './lib';
-
-const logger = new LoggingService('cli');
-
-export interface RecipeOptions {
-  recursive?: boolean;
-  output?: string;
-  include?: string[];
-  exclude?: string[];
-  imports?: string[];
-  cache?: boolean;
-  parallel?: number;
-}
+import { RecipeOptions } from './lib';
+import { CliError } from './lib/errors';
+import { LoggingService } from './logging';
 
 export interface CliOptions extends RecipeOptions {
+  buffered?: boolean;
   help?: boolean;
   recipe?: string[];
   verbose?: string[];
   silent?: string[];
+  cache?: boolean;
+  parallel?: number;
+  exclude?: string[];
 }
 
-const usage = `fst [options | PATH]
-options
-  -h, --help           Show this menu
-  -r, --recipe URI     Add recipe to builder (file or URL)
+export interface OptionCallback {
+  option: any;
+  options: Record<string, any>;
+  args: any[];
+  arg: string;
+}
 
-these options apply to all recipe files
-  -c, --cache          Use local copies of repos when possible
-  -C, --no-cache       Override cache fetching
-  -e, --exclude PATH   pattern?
-  -I, --imports PATH   pattern? File or folder to add to builder (can be called multiple times)
-  -i, --include PATH   pattern?
-  -p, --parallel NUM   Max number of concurrent recipe parsing (default 10)
-  -o, --output PATH    Path to output files
-  -R, --recursive      Recursively seach for recipes
-  -s, --silent         Log less verbosely
-  -v, --verbose        Log more verbosely
-`;
+export interface ProgramOption {
+  onOption: (opts: OptionCallback) => any;
+  alias?: string;
+  help?: string | [string, string];
+  default?: any;
+  positional?: number;
+}
 
-const booleans = ['h', 'help', 'R', 'recursive', 'c', 'cache', 'C', 'no-cache', 'S', 'sync'];
-const strings = ['recipe', 'r', 'I', 'imports', 'i', 'include', 'e', 'exclude', 'o', 'output', 'v', 'verbose', 's', 'silent', 'p', 'parallel'];
-const alias: Record<string, string> = { r: '_', recipe: '_' };
-const args = booleans.concat(strings);
+export class Program {
+  options: Record<string, any> = { _: [] };
 
-for (let i = 0; i < args.length; i += 2) {
-  if (args[i] !== 'r' && args[i] !== 'recipe') {
-    alias[args[i]] = args[i + 1];
+  private help: { entries: [string, string][]; len: number };
+  private config: Record<string, ProgramOption & { name: string }> = {};
+
+  constructor(private name: string) {
+    this.help = { entries: [], len: 0 };
   }
-}
-/**
- * { function_description }
- *
- * @param  {CliOptions}     input  The input
- *
- * @return {RecipeOptions}  The recipe options.
- */
-const cliToRecipe = (input: CliOptions): RecipeOptions => {
-  return ['recursive', 'output', 'include', 'exclude', 'imports', 'cache', 'sync', 'parallel'].reduce((rOpts: RecipeOptions, key: string) => {
-    if (key in input) {
-      (rOpts as any)[key] = (input as any)[key];
+
+  get<T = string>(optionName: string): T {
+    return this.options[optionName];
+  }
+
+  set(key: string, opt: ProgramOption): this {
+    const config = opt as ProgramOption & { name: string; help: [string, string] };
+    config.name = key.replace(/^\-\-?/, '');
+
+    this.config[key] = config;
+    if (opt.alias) {
+      this.config[opt.alias] = config;
     }
 
-    return rOpts;
-  }, {});
-};
+    this.options[config.name] = opt.default;
 
-/**
- * { function_description }
- */
-export const cli = async () => {
-  const options = minimist<CliOptions>(process.argv.slice(2), {
-    default: {
-      parallel: 10,
-    },
-    unknown(opt, _ctx) {
-      if (!/^-/.test(opt)) {
-        return true;
-      }
+    if (!config.help) {
+      return this;
+    }
 
-      console.error(`unknown option '${opt}'\n\n${usage}`);
-      process.exit(1);
-    },
-    boolean: booleans,
-    string: strings,
-    alias,
-  });
+    if (!Array.isArray(config.help)) {
+      config.help = ['', config.help];
+    }
 
-  if (options.help) {
-    console.log(usage);
-    process.exit(0);
+    const help = `${[opt.alias, key].filter(Boolean).join(', ')} ${opt.help[0] ?? ''}`;
+    this.help.entries.push([help, config.help[1]]);
+    this.help.len = Math.max(this.help.len, help.length);
+
+    return this;
   }
 
-  if (!options._?.length) {
-    console.error('at least one recipe or uri is required\n');
-    console.error(usage);
+  consume(argv: string[]): { type: string; message: string } {
+    const args = argv.slice().reverse();
+
+    while (args.length) {
+      const [arg, value] = args.pop().split('=');
+      const isOpt = arg.charAt(0) === '-';
+
+      if (isOpt && arg.charAt(1) !== '-' && arg.length > 2 && !value) {
+        args.push(...[...arg.slice(1)].map((a) => `-${a}`));
+        continue;
+      }
+
+      if (value) {
+        args.push(value);
+      }
+
+      if (isOpt && arg.charAt(1) !== '-' && value) {
+        return { type: 'error', message: `cannot combine '=' and short options '${arg}=${value}'` };
+      }
+
+      if (arg === '-h' || arg === '--help') {
+        this.options.help = true;
+
+        return null;
+      }
+
+      const config = isOpt ? this.config[arg] : this.config['_'];
+
+      if (config) {
+        try {
+          this.options[config.name] = config.onOption({
+            option: this.options[config.name],
+            options: this.options,
+            arg,
+            args: args.splice(args.length - (config.positional ?? 0), config.positional ?? 0),
+          });
+        } catch (e: any) {
+          return { type: 'error', message: e?.message };
+        }
+        continue;
+      }
+
+      if (isOpt) {
+        return { type: 'unknown arg', message: `unknown option '${arg}'` };
+      }
+
+      this.options._.push(arg);
+      continue;
+    }
+
+    return null;
+  }
+
+  usage(): string {
+    return this.help.entries.reduce(
+      (usage, [option, message]) => `${usage}\n  ${option.padEnd(this.help.len + 3)} ${message}`,
+      `${this.name}\n\noptions:`,
+    );
+  }
+}
+
+const logger = new LoggingService('cli');
+
+const getProgram = () => {
+  return new Program('fst <options | RECIPE>')
+    .set('--cache', {
+      onOption: () => true,
+      alias: '-c',
+      help: 'Do not delete fetched files between runs',
+      default: false,
+    })
+    .set('--output', {
+      onOption: ({ args }) => args[0],
+      alias: '-o',
+      positional: 1,
+      help: ['PATH', 'Folder to output files'],
+    })
+    .set('--parallel', {
+      onOption: ({ args }) => {
+        const parallel = parseInt(args[0], 10);
+        if (Number.isNaN(parallel) || parallel < 1) {
+          throw new CliError(`parallel must be a number greater than 0, received ${args[0]}`);
+        }
+
+        return parallel;
+      },
+      alias: '-p',
+      default: 10,
+      positional: 1,
+      help: ['COUNT', 'Max number of concurrent recipe parsing (default 10)'],
+    })
+    .set('--recipe', {
+      onOption: ({ option, args }) => (option || []).concat(args[0]),
+      positional: 1,
+      alias: '-r',
+      help: ['RECIPE', 'Add recipe to builder (file or URL)'],
+      default: [],
+    })
+    .set('--silent', {
+      onOption: (arg) => (arg.option || []).concat(''),
+      alias: '-s',
+      help: 'Log less verbosely',
+    })
+    .set('--verbose', {
+      onOption: (arg) => (arg.option || []).concat(''),
+      alias: '-v',
+      help: 'Log more verbosely',
+    })
+    .set('--exclude', {
+      onOption: (arg) => (arg.option || []).concat(arg.args[0].split(',').map((x: string) => x.trim())),
+      alias: '-e',
+      help: ['PATHS', 'Skip PATHS in template generation (default node_modules,.git)'],
+      positional: 1,
+    })
+    .set('--no-buffer', {
+      onOption: () => true,
+      alias: '-b',
+      help: 'Disable log buffering (default true unless not tty, CI=true, or TERM=dumb)',
+      default: !logger.useEscapeCodes(process.stdout.isTTY),
+      positional: 0,
+    });
+};
+
+const programToOptions = (program: Program): CliOptions => {
+  return {
+    cache: program.get('cache'),
+    parallel: program.get('parallel'),
+    output: program.get('output'),
+    exclude: program.get('exclude'),
+    buffered: !program.get('no-buffer'),
+  };
+};
+
+export const cli = async (args: string[]) => {
+  const program = getProgram();
+  const err = program.consume(args.slice());
+
+  if (err) {
+    console.error(`${err.message}\n\n${program.usage()}`);
     process.exit(1);
   }
 
-  if (typeof options.silent !== 'undefined') {
-    process.env.FST_LOG = ['', 'warn', 'error', 'none'][Math.min(options.silent.length || 1, 3)];
-  } else if (typeof options.verbose !== 'undefined') {
-    process.env.FST_LOG = ['', 'log', 'debug'][Math.min(options.verbose.length || 1, 2)];
+  if (program.get('help')) {
+    console.log(program.usage());
+    process.exit(0);
   }
 
-  if ((options as any)['no-cache']) {
-    options.cache = false;
+  const cliRecipes = program.get<string[]>('_').concat(program.get<string[]>('recipe'));
+  if (!cliRecipes.length) {
+    console.error('at least one recipe or uri is required\n');
+    console.error(program.usage());
+    process.exit(1);
   }
 
-  if (options.parallel) {
-    const parallel = parseInt(`${options.parallel}`, 10);
-    if (Number.isNaN(parallel) || !/^[0-9]+$/.test(`${options.parallel}`) || parallel < 1) {
-      console.error(`parallel must be a number greater than 0, received ${options.parallel}`);
-      process.exit(1);
+  if (typeof program.get('silent') !== 'undefined') {
+    process.env.FST_LOG = ['', 'warn', 'error', 'none'][Math.min(program.get('silent').length || 1, 3)];
+  } else if (typeof program.get('verbose') !== 'undefined') {
+    process.env.FST_LOG = ['', 'log', 'debug'][Math.min(program.get('verbose').length || 1, 2)];
+  }
+
+  logger.debug({ program });
+
+  const recipes = cliRecipes.map((from) => {
+    if (from[0] !== '{') {
+      try {
+        return require(resolve(from));
+      } catch (e) {
+        return { from };
+      }
     }
-    options.parallel = parallel;
-  }
 
-  logger.debug({ options });
+    try {
+      return JSON.parse(from);
+    } catch (e) {
+      return { from };
+    }
+  });
 
-  await fst(options._, cliToRecipe(options));
+  await fst(recipes, programToOptions(program));
 };
 
 if (require.main === module) {
-  cli().catch((e) => console.error(e));
+  cli(process.argv.slice(2)).catch((e) => console.error(e));
 }
