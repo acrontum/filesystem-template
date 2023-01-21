@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - rewrite and refactor recipes, cli, rendering
  - repositories must end with ".git" or be "git@repo.tld"
  - top-level arrays for recipes are no longer valid to simplify parsing and validating
-
+ - buffered output is now default, --no-buffer or --verbose disables
 
 ## [0.0.1] - 2021-05-12
 ### Added
