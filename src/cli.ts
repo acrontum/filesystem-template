@@ -141,7 +141,7 @@ const getProgram = () => {
     .set('--cache', {
       onOption: () => true,
       alias: '-c',
-      help: 'Use local copies of repos when possible',
+      help: 'Do not delete fetched files between runs',
       default: false,
     })
     .set('--output', {
@@ -172,7 +172,7 @@ const getProgram = () => {
       default: [],
     })
     .set('--silent', {
-      onOption: () => [''],
+      onOption: (arg) => (arg.option || []).concat(''),
       alias: '-s',
       help: 'Log less verbosely',
     })
@@ -191,20 +191,19 @@ const getProgram = () => {
       onOption: () => true,
       alias: '-b',
       help: 'Disable log buffering (default true unless not tty, CI=true, or TERM=dumb)',
-      default: logger.useEscapeCodes(process.stdout.isTTY),
+      default: !logger.useEscapeCodes(process.stdout.isTTY),
       positional: 0,
     });
 };
 
 const programToOptions = (program: Program): CliOptions => {
-  return ['buffered', 'help', 'verbose', 'silent', 'cache', 'parallel', 'output', 'exclude'].reduce((options, option) => {
-    const value = program.get(option);
-    if (typeof value !== 'undefined') {
-      options[option] = value;
-    }
-
-    return options;
-  }, {} as Record<string, any>);
+  return {
+    cache: program.get('cache'),
+    parallel: program.get('parallel'),
+    output: program.get('output'),
+    exclude: program.get('exclude'),
+    buffered: !program.get('no-buffer'),
+  };
 };
 
 export const cli = async (args: string[]) => {
