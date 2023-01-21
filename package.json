@@ -14,6 +14,7 @@
     "fmt": "prettier --write 'src/**/*.ts' 'test/*.ts'",
     "link": "ln -s $PWD/dist/src/cli.js ./node_modules/.bin/fst && chmod +x node_modules/.bin/fst",
     "pretest": "rm -rf .fst test-output; test -d dist || npm run build",
+    "test:unit": "npm run test -- --ignore '**/e2e.spec.js'",
     "test": "FST_LOG=${FST_LOG:-error} NODE_ENV=test mocha -r source-map-support/register --recursive 'dist/test/**/*.spec.js'"
   },
   "files": [

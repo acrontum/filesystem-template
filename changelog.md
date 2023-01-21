@@ -12,15 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 -->
 
-## Roadmap
-
-- write more tests
-- update docs
-- re-implement cli params (include / exclude files, cache, parallel, etc)
-- re-implement recipe params (include / exclude files, cache, parallel, etc)
-- disallow top-level array recipes (must always be object containing recipes)
-
-
 ## [0.1.0] - unreleased
 ### Added
  - add memoized fetch
@@ -41,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - update deps
  - rewrite and refactor recipes, cli, rendering
  - repositories must end with ".git" or be "git@repo.tld"
+ - top-level arrays for recipes are no longer valid to simplify parsing and validating
 
 
 ## [0.0.1] - 2021-05-12
