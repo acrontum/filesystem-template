@@ -1,11 +1,10 @@
-import { exec as execCb } from 'child_process';
+import { exec as execCb, ExecOptions } from 'child_process';
 import { fdir } from 'fdir';
-import { promises } from 'fs';
+import { createWriteStream, promises } from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { basename, dirname, join, resolve } from 'path';
 import { URL } from 'url';
-import { promisify } from 'util';
 import { LoggingService } from '../logging';
 import { RecipeRuntimeError } from './errors';
 import { VirtualFile } from './virtual-file';
@@ -34,7 +33,12 @@ export interface CacheInfo {
 }
 
 const logger = new LoggingService('file-utils');
-const exec = promisify(execCb);
+
+const exec = (command: string, options: ExecOptions): Promise<{ stdout: string; stderr: string }> => {
+  return new Promise((resolve, reject) => {
+    execCb(command, options, (err, stdout, stderr) => (err ? reject(err) : resolve({ stdout, stderr })));
+  });
+};
 
 export const exists = (path: string): Promise<boolean> =>
   promises
@@ -54,15 +58,13 @@ export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOption
   const fsTree: Record<string, VirtualFile> = {};
   let root: VirtualFile = null;
 
-  const getVirtualFile = (type: string, filePath: string, rootPath = dirPath) => {
-    const name = filePath.replace(rootPath, '') || '/';
-    const node = new VirtualFile(type, name);
+  const getVirtualFile = (type: string, fullSourcePath: string, rootPath = dirPath) => {
+    const name = fullSourcePath.replace(rootPath, '') || '/';
+    const node = new VirtualFile(type, { root, fullSourcePath, relativeSourcePath: name });
 
-    node.root = root;
     if (!root) {
       root = node;
     }
-    node.fullSourcePath = filePath;
 
     const parent = fsTree[name?.replace(/\/[^\/]+$/, '') || '/'];
     node.setParent(parent);
@@ -192,27 +194,33 @@ export const fetchFileFromUrl = async (url: URL, cacheInfo: CacheInfo, options?:
     return output;
   }
 
-  const file = await new Promise<string>((resolve, reject) => {
-    const req = (url.protocol == 'http:' ? http : https).request(url, (res) => {
+  await new Promise<string>((resolve, reject) => {
+    const req = (url.protocol == 'http:' ? http : https).request(url, async (res) => {
+      if (res.statusCode < 300) {
+        await promises.mkdir(dirname(output), { recursive: true });
+        return res
+          .pipe(createWriteStream(output))
+          .on('finish', () => resolve(output))
+          .on('error', reject);
+      }
+
+      if (res.statusCode < 400) {
+        return fetchFileFromUrl(new URL(res.headers.location), cacheInfo, options);
+      }
+
+      res.on('error', (error) => reject({ message: `Failed to fetch from URL`, url: url.href, error }));
+
       let data = '';
       res.on('data', (d) => (data += d.toString()));
       res.on('end', () => {
-        if (res.statusCode < 300) {
-          return resolve(data);
-        }
-
         const { statusCode, headers } = res;
         reject({ message: `Failed to fetch from URL`, url: url.href, response: { statusCode, headers, body: data } });
       });
-      res.on('error', (error) => reject({ message: `Failed to fetch from URL`, url: url.href, error }));
     });
 
     req.on('error', (error) => reject({ message: `Failed to fetch from URL`, url: url.href, error }));
     req.end();
   });
-
-  await promises.mkdir(dirname(output), { recursive: true });
-  await promises.writeFile(output, file);
 
   return output;
 };

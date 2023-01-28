@@ -4,7 +4,7 @@ import { join, resolve } from 'path';
 import { CliOptions } from '../cli';
 import { LoggingService, LogLevels } from '../logging';
 import { InvalidSchemaError } from './errors';
-import { fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
+import { exists, fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
 import { Renderer } from './renderer';
 
 export type RenderFunction = (recipe: Recipe, renderer: Renderer) => Promise<void> | void;
@@ -26,9 +26,6 @@ export interface RecipeOptions {
   output?: string;
   previousOutput?: string;
   exclude?: string[];
-  // include?: string[];
-  // cache?: boolean;
-  // parallel?: number;
 }
 
 export class Recipe implements RecipeSchema {
@@ -121,7 +118,7 @@ export class Recipe implements RecipeSchema {
       this.logger.info(`'${script}' ${this.logger.ylw(this.scripts[script], { stream: process.stdout })}`);
 
       const options: ExecOptions = { cwd: cwd || '.' };
-      const proc = exec(this.scripts[script], options, (error, stdout) => (error ? reject({ error, stdout }) : resolve(stdout)));
+      const proc = exec(this.scripts[script], options, (error, stdout, stderr) => (error ? reject({ error, stdout, stderr }) : resolve(stdout)));
 
       if (this.logger.getLevel() > LogLevels.info) {
         proc.stdout.pipe(process.stdout);
@@ -172,10 +169,10 @@ export class Recipe implements RecipeSchema {
     await this.runRecipeScript('before');
 
     if (typeof this.fileHandler === 'string') {
-      if (!existsSync(this.fileHandler)) {
+      if (!(await exists(this.fileHandler))) {
         await require(join(source, this.fileHandler))(this, renderer);
       } else {
-        await require(this.fileHandler)(this, renderer);
+        await require(resolve(this.fileHandler))(this, renderer);
       }
     } else if (typeof this.fileHandler === 'function') {
       await this.fileHandler(this, renderer);
@@ -203,7 +200,7 @@ export class Recipe implements RecipeSchema {
     this.scripts = schema.scripts;
     this.to = schema.to?.[0] === '/' ? schema.to : join(options.output || '.', schema.to || '.');
     this.previousOutput = options.previousOutput || process.cwd();
-    this.excludeDirs = (schema.excludeDirs || []).concat(options?.exclude);
+    this.excludeDirs = options?.exclude ? (schema.excludeDirs || []).concat(options.exclude) : schema.excludeDirs;
     this.includeDirs = schema.includeDirs;
     this.type = null;
 
