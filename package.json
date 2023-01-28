@@ -1,6 +1,6 @@
 {
   "name": "@acrontum/filesystem-template",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "repository": "https://github.com/acrontum/filesystem-template",
   "description": "Filesystem templating engine and project scaffolding tool",
   "main": "./dist/src/index.js",
