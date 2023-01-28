@@ -94,7 +94,7 @@ export class VirtualFile {
     return outputs;
   }
 
-  async generateFileOrFolder(name?: string | PathGetter): Promise<string[]> {
+  async generateFiles(name?: string | PathGetter): Promise<string[]> {
     logger.debug(`${this.name}: generate`);
     try {
       if (this.isDir) {

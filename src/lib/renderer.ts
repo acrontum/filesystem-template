@@ -69,7 +69,7 @@ export class Renderer {
           }
 
           if (!node.outputs.length && !node.skip) {
-            await node.generateFileOrFolder();
+            await node.generateFiles();
           }
 
           node.resolve();
