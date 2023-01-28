@@ -4,7 +4,7 @@ import { join, resolve } from 'path';
 import { CliOptions } from '../cli';
 import { LoggingService, LogLevels } from '../logging';
 import { InvalidSchemaError } from './errors';
-import { fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
+import { exists, fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
 import { Renderer } from './renderer';
 
 export type RenderFunction = (recipe: Recipe, renderer: Renderer) => Promise<void> | void;
@@ -169,7 +169,7 @@ export class Recipe implements RecipeSchema {
     await this.runRecipeScript('before');
 
     if (typeof this.fileHandler === 'string') {
-      if (!existsSync(this.fileHandler)) {
+      if (!(await exists(this.fileHandler))) {
         await require(join(source, this.fileHandler))(this, renderer);
       } else {
         await require(this.fileHandler)(this, renderer);
