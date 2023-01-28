@@ -89,7 +89,7 @@ export class Renderer {
    *
    * @return {string}  Rendered template
    */
-  renderAsTemplateString(template: string, templateVars: any = {}): string {
+  renderAsTemplateString(template: string, templateVars: any = {}): Promise<string> {
     const data = { _indent: this.indent, ...templateVars };
 
     const contentHash = createHash('md5').update(template).digest('base64');
@@ -97,7 +97,7 @@ export class Renderer {
     if (!this.cache[contentHash]) {
       const params = Object.keys(data).join(', ');
       const indenter = typeof data._indent === 'function' ? '_indent' : '';
-      this.cache[contentHash] = new Function('data', `return ((${params}) => ${indenter}\`${template}\`)(...Object.values(data));`);
+      this.cache[contentHash] = new Function('data', `return (async (${params}) => ${indenter}\`${template}\`)(...Object.values(data));`);
     }
 
     return this.cache[contentHash](data);
