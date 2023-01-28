@@ -26,9 +26,6 @@ export interface RecipeOptions {
   output?: string;
   previousOutput?: string;
   exclude?: string[];
-  // include?: string[];
-  // cache?: boolean;
-  // parallel?: number;
 }
 
 export class Recipe implements RecipeSchema {
