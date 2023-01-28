@@ -123,10 +123,6 @@ export class VirtualFile {
   }
 
   getGenerationTargets(name?: string | PathGetter): string[] {
-    if (this.outputs.length) {
-      return this.outputs;
-    }
-
     const getFileName = this.getPathBuilder(name);
 
     return this.getPrevOut().map((out) => join(out, getFileName(out)));
