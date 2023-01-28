@@ -2,9 +2,8 @@
 
 import { resolve } from 'path';
 import 'source-map-support/register';
-import { fst } from './index';
-import { RecipeOptions } from './lib';
-import { CliError } from './lib/errors';
+import { fst } from './fst';
+import { CliError, RecipeOptions } from './lib';
 import { LoggingService } from './logging';
 
 export interface CliOptions extends RecipeOptions {
@@ -206,25 +205,28 @@ const programToOptions = (program: Program): CliOptions => {
   };
 };
 
-export const cli = async (args: string[]) => {
+export const cli = async (args: string[]): Promise<number> => {
   const program = getProgram();
   const err = program.consume(args.slice());
 
   if (err) {
     console.error(`${err.message}\n\n${program.usage()}`);
-    process.exit(1);
+
+    return 1;
   }
 
   if (program.get('help')) {
     console.log(program.usage());
-    process.exit(0);
+
+    return 0;
   }
 
   const cliRecipes = program.get<string[]>('_').concat(program.get<string[]>('recipe'));
   if (!cliRecipes.length) {
     console.error('at least one recipe or uri is required\n');
     console.error(program.usage());
-    process.exit(1);
+
+    return 1;
   }
 
   if (typeof program.get('silent') !== 'undefined') {
@@ -252,8 +254,12 @@ export const cli = async (args: string[]) => {
   });
 
   await fst(recipes, programToOptions(program));
+
+  return 0;
 };
 
 if (require.main === module) {
-  cli(process.argv.slice(2)).catch((e) => console.error(e));
+  cli(process.argv.slice(2))
+    .then((exitCode) => process.exit(exitCode))
+    .catch(() => process.exit(1));
 }
