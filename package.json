@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "repository": "https://github.com/acrontum/filesystem-template",
   "description": "Filesystem templating engine and project scaffolding tool",
-  "main": "./dist/src/cli.js",
+  "main": "./dist/src/index.js",
   "bin": {
     "fst": "./dist/src/cli.js"
   },
