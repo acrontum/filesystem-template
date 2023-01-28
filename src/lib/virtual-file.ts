@@ -7,42 +7,53 @@ export type PathGetter = (p?: string) => string;
 
 const logger = new LoggingService('VirtualFile');
 
+export interface FileDetails {
+  relativeSourcePath: string;
+  fullSourcePath: string;
+  root?: VirtualFile;
+}
+
 /**
  * A representation of a file in the source folder, prior to rendering
  *
  * @class VirtualFile (name)
  */
 export class VirtualFile {
-  id: Symbol;
-  name: string;
-  relativeSourcePath: string;
-  fullSourcePath: string;
-  isDir: boolean;
   children: VirtualFile[];
+  fullSourcePath: string;
+  generated: Promise<void>;
+  id: Symbol;
+  isDir: boolean;
+  name: string;
   outputs: string[];
-  resolve: () => void;
   reject: (...args: any[]) => void;
-  generated?: Promise<void>;
-  baseUrl?: string;
-  root?: VirtualFile;
-  parent?: VirtualFile;
-  ext?: string;
+  relativeSourcePath: string;
+  resolve: () => void;
   action?: string;
   args?: Record<string, any>;
-  waitSiblings?: boolean;
+  baseUrl?: string;
+  ext?: string;
+  parent?: VirtualFile;
+  root?: VirtualFile;
   skip?: boolean;
 
-  constructor(type: string, relativeSourcePath: string) {
+  private waitSiblings?: boolean;
+
+  constructor(type: string, details: FileDetails) {
     this.id = Symbol('VirtualFile');
-    this.relativeSourcePath = relativeSourcePath;
-    this.name = basename(relativeSourcePath) || '/';
+    this.relativeSourcePath = details?.relativeSourcePath;
+    this.fullSourcePath = details?.fullSourcePath;
+    this.name = basename(details?.relativeSourcePath) || '/';
     this.isDir = type === 'dir';
     this.outputs = [];
     this.children = [];
     this.skip = false;
+    this.root = details?.root;
+
     if (!this.isDir) {
       this.ext = extname(this.name);
     }
+
     this.prepare();
   }
 
@@ -111,7 +122,7 @@ export class VirtualFile {
     }
   }
 
-  getOutputs(name?: string | PathGetter): string[] {
+  getGenerationTargets(name?: string | PathGetter): string[] {
     if (this.outputs.length) {
       return this.outputs;
     }
@@ -147,19 +158,24 @@ export class VirtualFile {
     await Promise.all(
       this.getPrevOut().map(async (out) => {
         const output = join(out, getFileName(out));
-        const exists = await promises
-          .access(output)
-          .then(() => true)
-          .catch(() => false);
-        if (exists) {
-          logger.debug(`${this.name}: exists ${output}`);
-          return;
-        }
-        await promises.copyFile(this.fullSourcePath, output);
-        this.outputs.push(output);
-        logger.debug(`${this.name}: out ${output}`);
 
-        return output;
+        return promises
+          .copyFile(this.fullSourcePath, output, promises.constants.COPYFILE_EXCL)
+          .then(() => {
+            this.outputs.push(output);
+            logger.debug(`${this.name}: out ${output}`);
+
+            return output;
+          })
+          .catch((err) => {
+            if (err.code === 'EEXIST') {
+              logger.debug(`${this.name}: exists ${output}`, err);
+            } else {
+              logger.error(`${this.name}: copy file error ${output}`, err);
+            }
+
+            return null;
+          });
       }),
     );
 
@@ -176,14 +192,15 @@ export class VirtualFile {
   }
 
   private getPathBuilder(name?: string | PathGetter): PathGetter {
-    let getter: PathGetter = () => this.name;
     if (typeof name === 'function') {
-      getter = name;
-    } else if (typeof name === 'string') {
-      getter = () => name;
+      return name;
     }
 
-    return getter;
+    if (typeof name === 'string') {
+      return () => name;
+    }
+
+    return () => this.name;
   }
 
   private getPrevOut(): string[] {

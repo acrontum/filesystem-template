@@ -121,7 +121,7 @@ export class Recipe implements RecipeSchema {
       this.logger.info(`'${script}' ${this.logger.ylw(this.scripts[script], { stream: process.stdout })}`);
 
       const options: ExecOptions = { cwd: cwd || '.' };
-      const proc = exec(this.scripts[script], options, (error, stdout) => (error ? reject({ error, stdout }) : resolve(stdout)));
+      const proc = exec(this.scripts[script], options, (error, stdout, stderr) => (error ? reject({ error, stdout, stderr }) : resolve(stdout)));
 
       if (this.logger.getLevel() > LogLevels.info) {
         proc.stdout.pipe(process.stdout);
@@ -203,7 +203,7 @@ export class Recipe implements RecipeSchema {
     this.scripts = schema.scripts;
     this.to = schema.to?.[0] === '/' ? schema.to : join(options.output || '.', schema.to || '.');
     this.previousOutput = options.previousOutput || process.cwd();
-    this.excludeDirs = (schema.excludeDirs || []).concat(options?.exclude);
+    this.excludeDirs = options?.exclude ? (schema.excludeDirs || []).concat(options.exclude) : schema.excludeDirs;
     this.includeDirs = schema.includeDirs;
     this.type = null;
 
