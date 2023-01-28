@@ -25,13 +25,10 @@ export interface RenderOptions {
 }
 
 export class Renderer {
-  keyHandlers: Record<string, Handler[]> = {};
-  filenameHandlers: Record<string, Handler[]> = {};
   handlers: Handler[] = [];
   dest: string;
   root: VirtualFile;
   cache: Record<string, Function> = {};
-  env: Record<string, string> = {};
 
   constructor(root: VirtualFile, dest: string) {
     this.dest = dest;
@@ -93,7 +90,7 @@ export class Renderer {
    * @return {string}  Rendered template
    */
   renderAsTemplateString(template: string, templateVars: any = {}): string {
-    const data = { _indent: this.indent, ...this.env, ...templateVars };
+    const data = { _indent: this.indent, ...templateVars };
 
     const contentHash = createHash('md5').update(template).digest('base64');
 
