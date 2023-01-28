@@ -172,7 +172,7 @@ export class Recipe implements RecipeSchema {
       if (!(await exists(this.fileHandler))) {
         await require(join(source, this.fileHandler))(this, renderer);
       } else {
-        await require(this.fileHandler)(this, renderer);
+        await require(resolve(this.fileHandler))(this, renderer);
       }
     } else if (typeof this.fileHandler === 'function') {
       await this.fileHandler(this, renderer);
