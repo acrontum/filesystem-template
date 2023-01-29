@@ -14,11 +14,19 @@ const basicRecipe: RecipeSchema = {
 describe(relative(process.cwd(), __filename), () => {
   let moxy: MoxyServer;
   let fixtureFiles: string[];
+  let openapiFiles: string[];
 
   before(async () => {
     moxy = new MoxyServer({ logging: 'error' });
     await moxy.listen();
     fixtureFiles = await listFiles(fixtures, { removePrefix: true });
+    openapiFiles = fixtureFiles.reduce((files, file) => {
+      if (file.startsWith('/templates/open-api-weather')) {
+        files.push(file.replace('/templates/open-api-weather', ''));
+      }
+
+      return files;
+    }, []);
   });
 
   beforeEach(async () => {
@@ -78,31 +86,24 @@ describe(relative(process.cwd(), __filename), () => {
           name: 'ssh.git',
           from: `ssh://localhost:${moxy.port}/repos/open-api-weather.git`,
           to: '../ssh',
-          scripts: {
-            after: 'echo ssh.git',
-          },
         },
         {
           name: 'git',
           from: `ssh+git://git@localhost:${moxy.port}/repos/open-api-weather.git`,
           to: '../git',
-          scripts: {
-            after: 'echo git',
-          },
         },
       ],
     };
 
     await fst([recipe], { cache: false });
 
-    const specFiles = await listFiles(getFixturePath('templates/open-api-weather'), { removePrefix: true });
     const httpFiles = await listFiles(join(testOutDir, 'http'), { removePrefix: true });
     const sshFiles = await listFiles(join(testOutDir, 'ssh'), { removePrefix: true });
     const gitFiles = await listFiles(join(testOutDir, 'git'), { removePrefix: true });
 
-    expect(httpFiles).to.deep.equals(specFiles);
-    expect(sshFiles).to.deep.equals(specFiles);
-    expect(gitFiles).to.deep.equals(specFiles);
+    expect(httpFiles).to.deep.equals(openapiFiles);
+    expect(sshFiles).to.deep.equals(openapiFiles);
+    expect(gitFiles).to.deep.equals(openapiFiles);
   });
 
   it('can exclude files', async () => {
