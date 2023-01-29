@@ -9,6 +9,7 @@
   },
   "scripts": {
     "preinstall": "git config core.hooksPath ./hooks",
+    "prebuild": "rm -rf dist",
     "build": "tsc -p .",
     "watch": "npm run build -- --watch --preserveWatchOutput",
     "fmt": "prettier --write 'src/**/*.ts' 'test/*.ts'",
