@@ -107,7 +107,7 @@ export class Recipe implements RecipeSchema {
     return sources;
   }
 
-  runRecipeScript(script: 'before' | 'after'): Promise<string> {
+  runRecipeScript(script: 'before' | 'after', env: Record<string, string> = {}): Promise<string> {
     if (!this.scripts?.[script]) {
       return null;
     }
@@ -117,7 +117,7 @@ export class Recipe implements RecipeSchema {
     return new Promise(async (resolve, reject) => {
       this.logger.info(`'${script}' ${this.logger.ylw(this.scripts[script], { stream: process.stdout })}`);
 
-      const options: ExecOptions = { cwd: cwd || '.' };
+      const options: ExecOptions = { cwd: cwd || '.', env: { ...process.env, ...env } };
       const proc = exec(this.scripts[script], options, (error, stdout, stderr) => (error ? reject({ error, stdout, stderr }) : resolve(stdout)));
 
       if (this.logger.getLevel() > LogLevels.info) {
@@ -166,7 +166,7 @@ export class Recipe implements RecipeSchema {
     const root = await generateVirtualFileTree(source, { exclude: this.excludeDirs });
     const renderer = new Renderer(root, this.to);
 
-    await this.runRecipeScript('before');
+    await this.runRecipeScript('before', { FST_SRC: source });
 
     if (typeof this.fileHandler === 'string') {
       if (!(await exists(this.fileHandler))) {
@@ -180,7 +180,7 @@ export class Recipe implements RecipeSchema {
 
     await renderer.renderTree();
 
-    await this.runRecipeScript('after');
+    await this.runRecipeScript('after', { FST_SRC: source });
 
     return sourceDirs;
   }

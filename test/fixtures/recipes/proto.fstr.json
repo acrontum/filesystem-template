@@ -22,6 +22,21 @@
           "pat": {}
         }
       }
+    },
+    {
+      "name": "same as above but in 1 pass",
+      "from": "../test/fixtures/templates/nestjs-template",
+      "to": "server",
+      "scripts": {
+        "before": "cd $FST_SRC/fstr && npm i && npm run build"
+      },
+      "fileHandler": "fstr/fstr-scaffolld.js",
+      "data": {
+        "modules": {
+          "auth": {},
+          "pat": {}
+        }
+      }
     }
   ]
 }

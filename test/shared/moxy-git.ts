@@ -72,9 +72,17 @@ export const moxyServeAsGit = (moxy: MoxyServer, folder: string) => {
 
         stream.pipe(proc.stdin);
 
-        proc.stdout.on('end', () => rm(join(repo, '.git'), { recursive: true, force: true }).catch(console.error));
+        proc.stdout.pipe(res);
 
-        return proc.stdout.pipe(res);
+        await new Promise((res) =>
+          proc.stdout.on('end', () =>
+            rm(join(repo, '.git'), { recursive: true, force: true })
+              .catch(console.error)
+              .then(() => res(null)),
+          ),
+        );
+
+        return res;
       } catch (e) {
         console.error(e);
       }
