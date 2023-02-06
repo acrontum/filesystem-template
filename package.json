@@ -8,7 +8,7 @@
     "fst": "./dist/src/cli.js"
   },
   "scripts": {
-    "preinstall": "git config core.hooksPath ./hooks",
+    "prepublishOnly": "git config core.hooksPath ./hooks",
     "prebuild": "rm -rf dist",
     "build": "tsc -p .",
     "watch": "npm run build -- --watch --preserveWatchOutput",
