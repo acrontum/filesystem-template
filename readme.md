@@ -215,7 +215,7 @@ Try:
 
 ## Roadmap
 
--[ ] write more tests  
--[ ] update docs  
--[ ] re-implement cli params (include / exclude files, cache, parallel, etc)  
--[ ] re-implement recipe params (include / exclude files, cache, parallel, etc)  
+- [ ] write more tests  
+- [ ] update docs  
+- [ ] re-implement cli params (include / exclude files, cache, parallel, etc)  
+- [ ] re-implement recipe params (include / exclude files, cache, parallel, etc)  
