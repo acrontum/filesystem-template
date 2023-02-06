@@ -10,16 +10,46 @@ import { Renderer } from './renderer';
 export type RenderFunction = (recipe: Recipe, renderer: Renderer) => Promise<void> | void;
 
 export interface RecipeSchema {
-  data?: any;
-  depends?: string[];
-  excludeDirs?: string[];
-  fileHandler?: string | RenderFunction;
-  from?: string;
-  includeDirs?: string[];
+  /**
+   * unique name of the recipe (for use with depends and passing data between files)
+   */
   name?: string;
-  recipes?: RecipeSchema[];
-  scripts?: { before?: string; after?: string };
+  /**
+   * file, recipe, path to file(s), url, or repository to fetch templates from
+   */
+  from?: string;
+  /**
+   * output folder
+   */
   to?: string;
+  /**
+   * arbitrary data store
+   */
+  data?: any;
+  /**
+   * array of names of other recipes which must be built first
+   */
+  depends?: string[];
+  /**
+   * lifecycle cli / shell commands
+   */
+  scripts?: { before?: string; after?: string };
+  /**
+   * path to render handler js file or handler function
+   */
+  fileHandler?: string | RenderFunction;
+  /**
+   * dependent / sub recipes
+   */
+  recipes?: RecipeSchema[];
+  /**
+   * list of folders to skip when copying or generating
+   */
+  excludeDirs?: string[];
+  /**
+   * when cloning, only clone certain folders
+   */
+  includeDirs?: string[];
 }
 
 export interface RecipeOptions {
