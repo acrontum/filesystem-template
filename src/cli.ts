@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { resolve } from 'path';
-import 'source-map-support/register';
 import { fst } from './fst';
 import { CliError, RecipeOptions } from './lib';
 import { LoggingService } from './logging';
