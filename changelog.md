@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 -->
 
-## [0.1.0] - unreleased
+## [0.1.1] - 2023-02-06
 ### Added
  - add memoized fetch
  - max-concurrent limit on batching recipes
