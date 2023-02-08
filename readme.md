@@ -7,7 +7,7 @@
 ## Usage
 
 Quickstart:  
-`npm install @acrontum/filesystem-template`  
+`npm install --save-dev @acrontum/filesystem-template`  
 
 Basic usage:  
 `npx fst [options] <path_to_recipe_file>`
@@ -88,9 +88,9 @@ interface RecipeSchema {
           "name": "client",
           "from": "./client",
           "to": "./client",
-          "hooks": [
-            "link-client.js"
-          ]
+          "scripts": {
+            "after": "node link-client.js"
+          }
         }
       ]
     },
@@ -134,15 +134,18 @@ With `demo.fstr.json`:
       "name": "demo-sub-recipe",
       "from": "../sub-template",
       "to": "sub-folder",
-      "fileHandler": "scripts/child-script.js"
+      "fileHandler": "scripts/child-script.js",
+      "scripts": {
+        "before": "touch readme.txt"
+      }
     }
   ]
 }
 ```
 
-Note that for `demo-sub-recipe`, both `"from"` and `"hooks"` are relative to the parent `"to"`, wheras the top-level script path (`'scripts/parent-script.js'`) is relative to the recipe file (in this case, `'./'`).  
+Note that for `demo-sub-recipe`, both `"from"` and `"scripts"` are relative to the parent `"to"`, wheras the top-level script path (`'scripts/parent-script.js'`) is relative to the recipe file (in this case, `'./'`).  
 
-For the sub-recipe, since both `"from"` and `"hooks"` read from folders in the root, their paths are parsed as `./demo-output/../sub-template` and `./demo-output/../scripts/child-script.js` (respectively).  
+For the sub-recipe, since both `"from"` and `"scripts"` read from folders in the root, their paths are parsed as `./demo-output/../sub-template` and `./demo-output/../scripts/child-script.js` (respectively).  
 
 Running the recipe file would then generate this folder structure:  
 ```
@@ -159,11 +162,11 @@ Running the recipe file would then generate this folder structure:
 ```
 
 
-### Lifecycle scripts and fileHandler
+### Lifecycle scripts
 
 Import and run scripts at different points in the runtime.  
 
-<b>scripts.before:</b>  
+#### scripts.before:
 Runs after source material exists on disk (after pulling from remote, or on finding local path), but before the render.  
 ```json
 {
@@ -174,13 +177,7 @@ Runs after source material exists on disk (after pulling from remote, or on find
 }
 ```
 
-<b>fileHandler:</b>  
-Runs after building source tree and initializing renderer. Used when registering callbacks for during render.  
-```typescript
-fileHandler?: (recipe: Recipe, renderer: Renderer) => void | Promise<void>;
-```
-
-<b>scripts.after:</b>  
+#### scripts.after:
 Runs after render and all files copied. Useful for cleanup or logging.  
 ```json
 {
@@ -190,6 +187,48 @@ Runs after render and all files copied. Useful for cleanup or logging.
   }
 }
 ```
+
+### fileHandler (rendering callback):
+
+Used when registering callbacks for during render.  
+```typescript
+fileHandler?: (recipe: Recipe, renderer: Renderer) => void | Promise<void>;
+```
+
+FST will search in the current directory of the recipe for the file handler script and, if that does not exist, in the temp template source folder.  
+
+```typescript
+import * as nunjucks from 'nunjucks';
+import { promises } from 'fs';
+import { RenderFunction, Recipe, Renderer, VirtualFile } from '@acrontum/filesystem-template';
+
+const render: RenderFunction = (recipe: Recipe, renderer: Renderer) => {
+  // recipe contains a name-indexed map of other recipes that have run
+  const parentRecipeData = recipe.map['parent-name'].data;
+
+  renderer.onFile(async (node: VirtualFile) => {
+    if (node.name === 'ignore-me.txt') {
+      node.skip = true; // skip generating this file
+
+      return;
+    }
+
+    if (!node.name.endsWith('.njk')) {
+      // if node is not skipped, and has no outputs, the default rendering will be to copy the file or folder
+      return;
+    }
+
+    const njkTemplate = await promises.readFile(node.fullSourcePath, 'utf8');
+
+    // the parent node may be a folder which generated in multiple places, meaning the source file will have multple outputs
+    for (const output of node.getGenerationTargets()) {
+      const content = await nunjunks.renderFile(njkTemplate, { ...parentRecipeData, ...recipe.data });
+      await promises.writeFile(output, content);
+      node.outputs.push(output);
+    }
+  });
+};
+````
 
 ---
 
