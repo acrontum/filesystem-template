@@ -1,7 +1,7 @@
 import { promises } from 'fs';
 import { join, resolve } from 'path';
 import { CliOptions } from './cli';
-import { RecipeRuntimeError, getProjectRoot, Recipe, RecipeSchema, validateRecipes } from './lib';
+import { RecipeRuntimeError, getProjectRoot, Recipe, RecipeSchema, assertNoCircularDependencies } from './lib';
 import { LogBuffer, LoggingService } from './logging';
 
 const logger = new LoggingService();
@@ -15,10 +15,13 @@ const cleanup = async (tempDirs: string[], cache: boolean) => {
   await promises.rm(join(process.cwd(), '.fst'), { recursive: true, force: true });
 };
 
+let n = 0;
+
 const runBatch = (options: CliOptions, tempDirs: string[], logBuffer: LogBuffer, packageRoot: string) => (recipes: Recipe[], batch: Recipe[]) => {
   return batch.map(async (recipe) => {
     if (!recipe.parse()) {
-      return true;
+      recipes.push(recipe);
+      return false;
     }
 
     const sources = await recipe.run({ ...options, packageRoot });
@@ -49,7 +52,7 @@ const runRecipes = async (recipes: Recipe[], tempDirs: string[], options?: CliOp
   await logBuffer.init(recipes.map(({ logger }) => logger));
 
   while (recipes.length) {
-    validateRecipes(recipes);
+    assertNoCircularDependencies(recipes);
 
     const batch = recipes.splice(0, maxConcurrent);
     const processed = await Promise.all(batcher(recipes, batch));
