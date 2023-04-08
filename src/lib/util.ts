@@ -16,7 +16,7 @@ const flattenDependencies = (recipe: Recipe | RecipeSchema, dependencies: Depend
   return dependencies;
 };
 
-const assertValid = (
+const assertNotCircular = (
   deps: Record<string, string>,
   seen: Map<string, boolean>,
   dependencies: Dependencies,
@@ -37,16 +37,16 @@ const assertValid = (
     }
 
     seen.set(key, true);
-    assertValid(dependencies[key], seen, dependencies, alreadyValid);
+    assertNotCircular(dependencies[key], seen, dependencies, alreadyValid);
     seen.delete(key);
     alreadyValid[key] = true;
   }
 };
 
-export const validateRecipes = (recipes: Recipe[]) => {
+export const assertNoCircularDependencies = (recipes: Recipe[]) => {
   const dependencies: Dependencies = recipes.reduce((deps, node) => flattenDependencies(node, deps), {});
 
   for (const recipeName of Object.keys(dependencies)) {
-    assertValid(dependencies[recipeName], new Map([[recipeName, true]]), dependencies);
+    assertNotCircular(dependencies[recipeName], new Map([[recipeName, true]]), dependencies);
   }
 };

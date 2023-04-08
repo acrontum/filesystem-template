@@ -89,6 +89,7 @@ export class Recipe implements RecipeSchema {
     if (this.parsed) {
       return true;
     }
+
     this.parsed = true;
 
     if (!this.from) {
@@ -103,6 +104,10 @@ export class Recipe implements RecipeSchema {
 
     const fullSourcePath = resolve(this.from[0] === '/' ? this.from : join(this.previousOutput || '.', this.from));
     if (!existsSync(fullSourcePath)) {
+      if (this.hasPendingDependency()) {
+        return (this.parsed = false);
+      }
+
       const { recipes, ...rest } = this.toJSON();
       this.logger.error({ message: 'Source not found', recipe: rest });
       throw new InvalidSchemaError('Source not found');
@@ -163,8 +168,12 @@ export class Recipe implements RecipeSchema {
     return rest;
   }
 
+  hasPendingDependency(): boolean {
+    return !!this.depends.find((dep) => !this.map[dep]?.generated);
+  }
+
   private async generate(options?: CliOptions & SourceOptions): Promise<string[]> {
-    if (this.depends.find((dep) => !this.map[dep]?.generated)) {
+    if (this.hasPendingDependency()) {
       return null;
     }
 

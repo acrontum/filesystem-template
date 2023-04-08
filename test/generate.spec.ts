@@ -1,7 +1,7 @@
 import { MoxyServer } from '@acrontum/moxy';
 import { expect } from 'chai';
 import { rm } from 'fs/promises';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { fst, listAllFiles, RecipeSchema } from '../src';
 import { fixtures, getFixturePath, listFiles, testOutDir, testOutDirname } from './shared/helpers';
 import { moxyServeAsGit } from './shared/moxy-git';
@@ -121,5 +121,57 @@ describe(relative(process.cwd(), __filename), () => {
     const files = await listFiles(testOutDir, { removePrefix: true });
 
     expect(files).to.deep.equals(['/.boatsrc', '/.gitignore', '/package.json']);
+  });
+
+  it('waits for dependencies when validating source / from', async () => {
+    await fst(
+      [
+        {
+          name: 'source does not exist at parse time',
+          recipes: [
+            {
+              name: 'clone',
+              scripts: {
+                after: 'mkdir tpl',
+              },
+            },
+            {
+              name: 'modify',
+              from: 'tpl',
+              to: 'modified',
+              scripts: {
+                after: 'mkdir hello',
+              },
+              depends: ['clone'],
+            },
+            {
+              name: 'touch hello text',
+              from: 'modified/hello',
+              to: 'modified/hello',
+              scripts: {
+                after: 'touch hello.txt',
+              },
+              depends: ['modify'],
+            },
+          ],
+        },
+      ],
+      { output: testOutDir },
+    );
+
+    const pathPrefix = dirname(testOutDir);
+
+    const tree = (await listAllFiles(testOutDir)).reduce(
+      (filesAndFolders: string[], { dir, files }) => filesAndFolders.concat([dir, ...files].map((path) => path.replace(pathPrefix, ''))),
+      [],
+    );
+
+    expect(tree).deep.equals([
+      '/test-output',
+      '/test-output/modified',
+      '/test-output/modified/hello',
+      '/test-output/modified/hello/hello.txt',
+      '/test-output/tpl',
+    ]);
   });
 });
