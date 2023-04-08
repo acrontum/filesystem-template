@@ -169,7 +169,6 @@ export class Recipe implements RecipeSchema {
   }
 
   hasPendingDependency(): boolean {
-    // console.log(this.depends, !!this.depends.find((dep) => !this.map[dep]?.generated));
     return !!this.depends.find((dep) => !this.map[dep]?.generated);
   }
 

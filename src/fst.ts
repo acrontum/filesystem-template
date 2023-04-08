@@ -15,12 +15,11 @@ const cleanup = async (tempDirs: string[], cache: boolean) => {
   await promises.rm(join(process.cwd(), '.fst'), { recursive: true, force: true });
 };
 
-let n = 0;
-
 const runBatch = (options: CliOptions, tempDirs: string[], logBuffer: LogBuffer, packageRoot: string) => (recipes: Recipe[], batch: Recipe[]) => {
   return batch.map(async (recipe) => {
     if (!recipe.parse()) {
       recipes.push(recipe);
+
       return false;
     }
 
