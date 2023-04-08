@@ -7,7 +7,7 @@
 ## Usage
 
 Quickstart:  
-`npm install --save-dev @acrontum/filesystem-template`  
+`npm install --save-dev @acrontum/fst`  
 
 Basic usage:  
 `npx fst [options] <path_to_recipe_file>`
