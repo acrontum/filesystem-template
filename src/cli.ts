@@ -185,11 +185,11 @@ const getProgram = () => {
       help: ['PATHS', 'Skip PATHS in template generation (default node_modules,.git)'],
       positional: 1,
     })
-    .set('--no-buffer', {
-      onOption: () => true,
+    .set('--buffer', {
+      onOption: () => logger.useEscapeCodes(process.stdout.isTTY),
       alias: '-b',
-      help: 'Disable log buffering (default true unless not tty, CI=true, or TERM=dumb)',
-      default: !logger.useEscapeCodes(process.stdout.isTTY),
+      help: 'Enable log buffering (default false). Ignored if not tty, CI=true, or TERM=dumb',
+      default: false,
       positional: 0,
     });
 };
@@ -200,7 +200,7 @@ const programToOptions = (program: Program): CliOptions => {
     parallel: program.get('parallel'),
     output: program.get('output'),
     exclude: program.get('exclude'),
-    buffered: !program.get('no-buffer'),
+    buffered: program.get('buffer'),
   };
 };
 
