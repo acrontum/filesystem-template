@@ -1,10 +1,10 @@
 import { exec as execCb, ExecOptions } from 'child_process';
-import { fdir } from 'fdir';
+import { fdir, GroupOutput } from 'fdir';
 import { createWriteStream, promises } from 'fs';
 import * as http from 'http';
 import * as https from 'https';
-import { basename, dirname, join, resolve } from 'path';
-import { URL } from 'url';
+import { dirname, join, posix, resolve } from 'path';
+import { fileURLToPath, URL } from 'url';
 import { LoggingService } from '../logging';
 import { RecipeRuntimeError } from './errors';
 import { VirtualFile } from './virtual-file';
@@ -20,11 +20,6 @@ export interface TreeOptions {
   exclude?: string[];
 }
 
-export interface Group {
-  dir: string;
-  files: string[];
-}
-
 export interface CacheInfo {
   path: string;
   branch?: string;
@@ -33,6 +28,7 @@ export interface CacheInfo {
 }
 
 const logger = new LoggingService('file-utils');
+export const runtimeCache: Record<string, Promise<any>> = {};
 
 const exec = (command: string, options: ExecOptions): Promise<{ stdout: string; stderr: string }> => {
   return new Promise((resolve, reject) => {
@@ -46,19 +42,25 @@ export const exists = (path: string): Promise<boolean> =>
     .then(() => true)
     .catch(() => false);
 
-export const isRecipeFile = (file: string): boolean => {
-  return /\.fstr\.js(on)?$/.test(file);
-};
+export const isRecipeFile = (file: string): boolean => /\.fstr\.js(on)?$/.test(file);
 
-export const isRepo = (file: string): boolean => {
-  return /\.git([?#].*)?$/.test(file);
-};
+export const isRepo = (file: string): boolean => /\.git([?#].*)?$/.test(file);
 
+/**
+ * Build an in-memory filesystem from root folder "dirPath". By default, node_modules and .git are excluded and
+ * can be included by including inverted names in opts.ignore: ['dist', '!.git', '!node_modules'].
+ *
+ * @param  {string}            dirPath        Root dir to list
+ * @param  {string[]}          opts.exclude   Array of strings to skip (exact match files / folders).
+ *
+ * @return {Promise<VirtualFile>}  The root of the file tree, with all child nodes built
+ */
 export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOptions): Promise<VirtualFile> => {
   const fsTree: Record<string, VirtualFile> = {};
   let root: VirtualFile = null;
 
   const getVirtualFile = (type: string, fullSourcePath: string, rootPath = dirPath) => {
+    fullSourcePath = fullSourcePath.replace(/\/+$/, '');
     const name = fullSourcePath.replace(rootPath, '') || '/';
     const node = new VirtualFile(type, { root, fullSourcePath, relativeSourcePath: name });
 
@@ -66,9 +68,9 @@ export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOption
       root = node;
     }
 
-    const parent = fsTree[name?.replace(/\/[^\/]+$/, '') || '/'];
-    node.setParent(parent);
+    const parentName = dirname(name || '/');
 
+    node.setParent(fsTree[parentName]);
     fsTree[name] = node;
 
     return node;
@@ -81,64 +83,82 @@ export const generateVirtualFileTree = async (dirPath: string, opts?: TreeOption
     return root;
   }
 
-  const groups = await listAllFiles(dirPath, opts?.exclude);
+  const allExcludes = ['.git', 'node_modules'];
+  if (Array.isArray(opts?.exclude) && opts.exclude.length) {
+    allExcludes.push(...opts.exclude);
+  }
 
-  groups.forEach(({ dir, files }) => {
-    getVirtualFile('dir', dir);
+  const ignore: Record<string, boolean> = {};
+  for (const dir of allExcludes) {
+    const negate = dir[0] === '!';
+    if (negate) {
+      delete ignore[dir.slice(1)];
+    } else {
+      ignore[dir] = true;
+    }
+  }
 
-    files.forEach((file) => {
+  for (const key in ignore) {
+    if (!ignore[key]) {
+      delete ignore[key];
+    }
+  }
+
+  const groups = await listAllFiles(dirPath, ignore);
+  for (const { directory, files } of groups) {
+    getVirtualFile('dir', directory);
+
+    for (const file of files) {
       getVirtualFile('file', file);
-    });
-  });
+    }
+  }
 
   return root;
 };
 
 /**
- * Recursively list all files. By default, node_modules and .git are excluded.
+ * Recursively list all files.
  *
- * @param  {string}            dir      Root dir to list
- * @param  {string[]}          exclude  Array of paths to ignore
+ * @param  {string}                   dir      Root dir to list
+ * @param  {Record<string, boolean>}  ignore   Object with keys = files / folders, values = true / false
  *
  * @return {Promise<Group[]>}  An array of groups of folders and files
  */
-export const listAllFiles = async (dir: string, exclude?: string[]): Promise<Group[]> => {
-  const ignore: Record<string, boolean> = (exclude || ['.git', 'node_modules']).reduce((acc, dir) => ({ ...acc, [dir]: true }), {});
+export const listAllFiles = (dir: string, ignore?: Record<string, boolean>): Promise<GroupOutput> => {
+  const ignores = Object.keys(ignore);
+  const rootFilePath = dir + '/';
 
-  const files = (await new fdir()
-    .crawlWithOptions(dir, {
-      includeBasePath: true,
-      group: true,
-      exclude: (dirname: string) => ignore[dirname],
-    })
-    .withPromise()) as Group[];
+  return new fdir<GroupOutput>({
+    includeBasePath: true,
+    group: true,
+    filters: [
+      (path: string) => {
+        if (ignore[path]) {
+          return false;
+        }
+        const relpath = path.replace(rootFilePath, '');
+        if (ignore[relpath]) {
+          return false;
+        }
 
-  return files.sort((a, b) => a.dir.localeCompare(b.dir));
-};
+        for (const ignore of ignores) {
+          if (path.indexOf(ignore) === 0 || relpath.indexOf(ignore) === 0) {
+            return false;
+          }
+        }
 
-export const getProjectRoot = async (): Promise<string> => {
-  let max = parseInt(process.env.FST_PACKAGE_HEIGHT, 10);
-  if (typeof max !== 'number' || Number.isNaN(max)) {
-    max = 10;
-  }
-
-  let current: string = process.env.npm_package_json || '.';
-
-  while (max-- && !(await exists(current))) {
-    current = join(dirname(dirname(current)), 'package.json');
-  }
-
-  if (max <= 0) {
-    logger.warn(`project root not found, using '${process.cwd()}' - consider increasing env var FST_PACKAGE_HEIGHT (was '${max}')`);
-
-    return process.cwd();
-  }
-
-  return dirname(current);
+        return true;
+      },
+    ],
+  })
+    .crawl(dir)
+    .withPromise();
+  // .then((groups) => groups.sort((a, b) => a.directory.localeCompare(b.directory)));
 };
 
 export const fetchSource = async (pathlike: string, options?: SourceOptions): Promise<string> => {
   options = options || {};
+  options.packageRoot ||= process.cwd();
 
   if (await exists(pathlike)) {
     logger.log(`will copy ${logger.grn(pathlike)}`);
@@ -154,22 +174,41 @@ export const fetchSource = async (pathlike: string, options?: SourceOptions): Pr
     throw new RecipeRuntimeError(`file not found ${pathlike}`);
   }
 
-  const cache = await getChacheInfo(url, options?.packageRoot);
-  if (await exists(cache?.path)) {
-    logger.log(`cache hit on ${cache?.path}`);
+  const cache = await getChacheInfo(url, options.packageRoot);
 
-    return cache?.path;
+  if (cache?.path in runtimeCache) {
+    return await runtimeCache[cache?.path].catch((e) => {
+      console.trace(e);
+      throw e;
+    });
   }
 
-  if (isRepo(url.pathname)) {
-    return fetchRepo(cache, options);
-  }
+  runtimeCache[cache?.path] = new Promise<string>(async (resolve, reject) => {
+    try {
+      if (await exists(cache?.path)) {
+        logger.log(`cache hit on ${cache?.path}`);
 
-  return fetchFileFromUrl(url, cache, options);
+        return cache?.path;
+      }
+
+      let result: string;
+      if (isRepo(url.pathname)) {
+        result = await fetchRepo(cache, options);
+      } else {
+        result = await fetchFileFromUrl(url, cache, options);
+      }
+
+      return resolve(result);
+    } catch (e) {
+      return reject(e);
+    }
+  });
+
+  return await runtimeCache[cache?.path];
 };
 
 export const getChacheInfo = async (url: URL, packageRoot: string): Promise<CacheInfo> => {
-  const projectDir = packageRoot || (await getProjectRoot());
+  const projectDir = packageRoot;
 
   if (!isRepo(url.pathname)) {
     const filename = `.fst/remote/${url.hostname}${url.pathname}${url.search?.replace?.('?', '-')}`;
@@ -179,7 +218,7 @@ export const getChacheInfo = async (url: URL, packageRoot: string): Promise<Cach
 
   let branch = url?.hash?.slice?.(1);
   const repoName = `.fst/remote/${url.pathname.slice(1) || url.hostname}`;
-  const repo = join(projectDir, repoName);
+  const repo = posix.join(projectDir, repoName);
   const origin = url.href.replace(url.hash, '').replace(url.search, '');
 
   return { path: repo, origin, repoName, branch };
@@ -198,6 +237,7 @@ export const fetchFileFromUrl = async (url: URL, cacheInfo: CacheInfo, options?:
     const req = (url.protocol == 'http:' ? http : https).request(url, async (res) => {
       if (res.statusCode < 300) {
         await promises.mkdir(dirname(output), { recursive: true });
+
         return res
           .pipe(createWriteStream(output))
           .on('finish', () => resolve(output))
@@ -244,7 +284,12 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
 
     if (!(await exists(join(cwd, '.git')))) {
       await exec('git init', { cwd });
-      await exec(`git remote add -f origin ${origin}`, { cwd });
+      await exec(`git remote add -f origin ${origin}`, { cwd }).catch((e) => {
+        if (e?.message?.indexOf('remote origin already exists') !== -1) {
+          return;
+        }
+        throw e;
+      });
     }
 
     if (options?.subdirs?.length) {
@@ -253,13 +298,11 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
     }
 
     if (!branch) {
-      let res = await exec('git symbolic-ref refs/remotes/origin/HEAD', { cwd }).catch(() => ({ stdout: '' }));
-      if (!res?.stdout) {
-        await exec('git remote set-head origin --auto', { cwd });
-        res = await exec('git symbolic-ref refs/remotes/origin/HEAD', { cwd });
-      }
-
-      branch = basename(res?.stdout?.replace?.(/\n/g, ''));
+      const remote = await exec('git remote show origin', { cwd });
+      const head = 'HEAD branch: ';
+      const start = remote.stdout.indexOf(head);
+      const end = remote.stdout.indexOf('\n', start);
+      branch = remote.stdout.slice(start + head.length, end);
     }
 
     await exec(`git fetch origin ${branch}`, { cwd });
@@ -267,6 +310,7 @@ export const fetchRepo = async (cacheInfo: CacheInfo, options?: SourceOptions): 
 
     return repo;
   } catch (e) {
+    console.trace(e);
     await promises.rm(repo, { recursive: true, force: true } as any).catch(() => null);
     throw e;
   }

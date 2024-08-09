@@ -113,7 +113,7 @@ describe(relative(process.cwd(), __filename), () => {
       name: 'http.git',
       from: `http://localhost:${moxy.port}/repos/open-api-weather.git`,
       to: testOutDir,
-      excludeDirs: ['src', 'helpers'],
+      exclude: ['src', 'helpers', '.gitignore'],
     };
 
     await fst([recipe], { cache: false });

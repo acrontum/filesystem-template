@@ -50,3 +50,41 @@ export const assertNoCircularDependencies = (recipes: Recipe[]) => {
     assertNotCircular(dependencies[recipeName], new Map([[recipeName, true]]), dependencies);
   }
 };
+
+const innermerge = (dest: Record<string, unknown>, source: Record<string, unknown>) => {
+  for (const key in source) {
+    const value = source[key];
+    const left = Array.isArray(dest[key]) ? 'array' : typeof dest[key];
+    const right = Array.isArray(value) ? 'array' : typeof value;
+
+    if (!(key in dest)) {
+      dest[key] = value;
+      continue;
+    }
+
+    if (left !== right) {
+      dest[key] = value;
+      continue;
+    }
+
+    if (left === 'array') {
+      dest[key] = (dest[key] as unknown[]).concat(value);
+      continue;
+    }
+
+    if (left === 'object') {
+      innermerge(dest[key] as Record<string, unknown>, value as Record<string, unknown>);
+      continue;
+    }
+
+    dest[key] = value;
+  }
+};
+
+export const jsonMerge = (dest: Record<string, unknown> = {}, source: Record<string, unknown> = {}) => {
+  dest = structuredClone(dest);
+
+  innermerge(dest, source);
+
+  return dest;
+};

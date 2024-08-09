@@ -25,7 +25,10 @@ export class LoggingService {
   emitter: EventEmitter;
   context: string;
 
-  constructor(context?: string, public level?: keyof typeof LogLevels) {
+  constructor(
+    context?: string,
+    public level?: keyof typeof LogLevels,
+  ) {
     this.context = context || new Error().stack.split('\n')[2].match(/\/(?<caller>[^\/:]+)\.[tj]s:/).groups.caller;
     this.emitter = new EventEmitter();
   }

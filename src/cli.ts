@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { resolve } from 'path';
+import './console-patch';
 import { fst } from './fst';
-import { CliError, RecipeOptions } from './lib';
+import { CliError, RecipeOptions, RecipeSchema } from './lib';
 import { LoggingService } from './logging';
 
 export interface CliOptions extends RecipeOptions {
@@ -10,10 +11,12 @@ export interface CliOptions extends RecipeOptions {
   help?: boolean;
   recipe?: string[];
   verbose?: string[];
-  silent?: string[];
+  quiet?: string[];
   cache?: boolean;
   parallel?: number;
   exclude?: string[];
+  data?: unknown;
+  _?: string[];
 }
 
 export interface OptionCallback {
@@ -41,11 +44,11 @@ export class Program {
     this.help = { entries: [], len: 0 };
   }
 
-  get<T = string>(optionName: string): T {
+  get<T = string>(optionName: keyof CliOptions): T {
     return this.options[optionName];
   }
 
-  set(key: string, opt: ProgramOption): this {
+  set(key: `--${keyof CliOptions}`, opt: ProgramOption): this {
     const config = opt as ProgramOption & { name: string; help: [string, string] };
     config.name = key.replace(/^\-\-?/, '');
 
@@ -125,10 +128,12 @@ export class Program {
   }
 
   usage(): string {
-    return this.help.entries.reduce(
+    const help = this.help.entries.reduce(
       (usage, [option, message]) => `${usage}\n  ${option.padEnd(this.help.len + 3)} ${message}`,
       `${this.name}\n\noptions:`,
     );
+
+    return `\x1b[0;0m${help}`;
   }
 }
 
@@ -169,9 +174,9 @@ const getProgram = () => {
       help: ['RECIPE', 'Add recipe to builder (file or URL)'],
       default: [],
     })
-    .set('--silent', {
+    .set('--quiet', {
       onOption: (arg) => (arg.option || []).concat(''),
-      alias: '-s',
+      alias: '-q',
       help: 'Log less verbosely',
     })
     .set('--verbose', {
@@ -185,12 +190,26 @@ const getProgram = () => {
       help: ['PATHS', 'Skip PATHS in template generation (default node_modules,.git)'],
       positional: 1,
     })
-    .set('--buffer', {
+    .set('--buffered', {
       onOption: () => logger.useEscapeCodes(process.stdout.isTTY),
       alias: '-b',
       help: 'Enable log buffering (default false). Ignored if not tty, CI=true, or TERM=dumb',
       default: false,
       positional: 0,
+    })
+    .set('--data', {
+      onOption: ({ args }) => {
+        try {
+          return JSON.parse(args[0]);
+        } catch (e) {
+          console.error(`Invalid data format: expected json string, received "${args[0]}"`);
+          process.exit(1);
+        }
+      },
+      alias: '-d',
+      help: ['DATA', 'Provide json DATA to recipes (eg -d \'{"name": "my recipe"}\')'],
+      default: null,
+      positional: 1,
     });
 };
 
@@ -200,7 +219,7 @@ const programToOptions = (program: Program): CliOptions => {
     parallel: program.get('parallel'),
     output: program.get('output'),
     exclude: program.get('exclude'),
-    buffered: program.get('buffer'),
+    buffered: program.get('buffered'),
   };
 };
 
@@ -208,16 +227,16 @@ export const cli = async (args: string[]): Promise<number> => {
   const program = getProgram();
   const err = program.consume(args.slice());
 
-  if (err) {
-    console.error(`${err.message}\n\n${program.usage()}`);
-
-    return 1;
-  }
-
   if (program.get('help')) {
     console.log(program.usage());
 
     return 0;
+  }
+
+  if (err) {
+    console.error(`${err.message}\n\n${program.usage()}`);
+
+    return 1;
   }
 
   const cliRecipes = program.get<string[]>('_').concat(program.get<string[]>('recipe'));
@@ -228,27 +247,29 @@ export const cli = async (args: string[]): Promise<number> => {
     return 1;
   }
 
-  if (typeof program.get('silent') !== 'undefined') {
-    process.env.FST_LOG = ['', 'warn', 'error', 'none'][Math.min(program.get('silent').length || 1, 3)];
+  if (typeof program.get('quiet') !== 'undefined') {
+    process.env.FST_LOG = ['', 'warn', 'error', 'none'][Math.min(program.get('quiet').length || 1, 3)];
   } else if (typeof program.get('verbose') !== 'undefined') {
     process.env.FST_LOG = ['', 'log', 'debug'][Math.min(program.get('verbose').length || 1, 2)];
   }
 
   logger.debug({ program });
 
+  const addRecipeData = (recipe: RecipeSchema): RecipeSchema => Object.assign({}, recipe, { data: program.get('data') });
+
   const recipes = cliRecipes.map((from) => {
     if (from[0] !== '{') {
       try {
-        return require(resolve(from));
+        return addRecipeData(structuredClone(require(resolve(from))));
       } catch (e) {
-        return { from };
+        return addRecipeData({ from });
       }
     }
 
     try {
-      return JSON.parse(from);
+      return addRecipeData(JSON.parse(from));
     } catch (e) {
-      return { from };
+      return addRecipeData({ from });
     }
   });
 

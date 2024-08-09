@@ -1,11 +1,13 @@
 import { exec, ExecOptions } from 'child_process';
 import { existsSync, promises, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { copyFile } from 'fs/promises';
+import { basename, join, resolve, sep } from 'path';
 import { CliOptions } from '../cli';
 import { LoggingService, LogLevels } from '../logging';
 import { InvalidSchemaError } from './errors';
 import { exists, fetchSource, generateVirtualFileTree, isRecipeFile, isRepo, SourceOptions } from './fs-utils';
 import { Renderer } from './renderer';
+import { jsonMerge } from './util';
 
 export type RenderFunction = (recipe: Recipe, renderer: Renderer) => Promise<void> | void;
 
@@ -43,9 +45,9 @@ export interface RecipeSchema {
    */
   recipes?: RecipeSchema[];
   /**
-   * list of folders to skip when copying or generating
+   * list of files/folders to skip when copying or generating
    */
-  excludeDirs?: string[];
+  exclude?: string[];
   /**
    * when cloning, only clone certain folders
    */
@@ -61,7 +63,7 @@ export interface RecipeOptions {
 export class Recipe implements RecipeSchema {
   data?: any;
   depends?: string[];
-  excludeDirs?: string[];
+  exclude?: string[];
   fileHandler?: string | RenderFunction;
   from?: string;
   includeDirs?: string[];
@@ -69,7 +71,10 @@ export class Recipe implements RecipeSchema {
   recipes?: RecipeSchema[];
   scripts?: { before?: string; after?: string };
   to?: string;
+  parent?: Recipe;
 
+  /** Path to intermediate download location (eg .fst/localhost/name/) */
+  source: string;
   schema: RecipeSchema;
   logger: LoggingService;
   previousOutput: string;
@@ -77,6 +82,12 @@ export class Recipe implements RecipeSchema {
   map: Record<string, Recipe>;
   generated: boolean = false;
   parsed: boolean = false;
+
+  start: number;
+  waiting: number;
+
+  runtime: number;
+  waittime: number;
 
   constructor(schema: RecipeSchema, map?: Record<string, Recipe>, options?: RecipeOptions) {
     this.loadSchema(schema, options || {});
@@ -134,7 +145,15 @@ export class Recipe implements RecipeSchema {
     const sources = await this.generate(options);
     if (sources !== null) {
       this.generated = true;
-      this.logger.info(this.logger.grn('done'));
+
+      this.runtime = Date.now() - this.start;
+      const timing = [`${this.runtime}ms`];
+      if (this.waiting && this.start !== this.waiting) {
+        this.waittime = Date.now() - this.waiting;
+        timing.push(`${this.waittime - this.runtime}ms waiting`);
+      }
+
+      this.logger.info(this.logger.grn(`done (${timing.join(', ')})`));
     } else {
       this.logger.info('waiting');
     }
@@ -174,42 +193,76 @@ export class Recipe implements RecipeSchema {
 
   private async generate(options?: CliOptions & SourceOptions): Promise<string[]> {
     if (this.hasPendingDependency()) {
+      this.waiting ||= Date.now();
       return null;
     }
+    this.start = Date.now();
 
     const { recipes, ...rest } = this.toJSON();
     this.logger.log('runRecipe:', this.logger.blu(JSON.stringify(rest, null, 2), { bold: true }));
 
     const sourceDirs: string[] = [];
 
-    await promises.mkdir(this.to, { recursive: true });
-
     if (this.type === 'stub') {
+      await promises.mkdir(this.to, { recursive: true });
       await this.runRecipeScript('before');
       await this.runRecipeScript('after');
 
       return sourceDirs;
     }
 
-    let source = await fetchSource(this.from, { subdirs: this.includeDirs, cache: options?.cache, packageRoot: options?.packageRoot });
+    this.source = await fetchSource(this.from, { subdirs: this.includeDirs, cache: options?.cache, packageRoot: options?.packageRoot });
     if (this.type == 'repo' || this.type == 'url') {
-      sourceDirs.push(source);
+      sourceDirs.push(this.source);
     }
 
-    if (this.type === 'url' && isRecipeFile(source)) {
-      this.recipes = [require(source), ...(this.recipes || [])];
+    if (this.type === 'url') {
+      if (isRecipeFile(this.source)) {
+        await promises.mkdir(this.to, { recursive: true });
+
+        /*
+        @TODO: figure out a better way to handle from: some.fstr.json
+        ideally, data and other options should be passed in / merged to the current one for generation
+        {
+          "name": "test",
+          "from": "something.fstr.json",
+          "scripts": { ... },
+          "data": { ... }
+        }
+        */
+
+        const next = structuredClone(require(this.source));
+        // todo: make sure this merges properly
+        next.name = this.name;
+        next.scripts = this.scripts;
+        next.depends = this.depends;
+        next.data = jsonMerge(next.data, this.data);
+        // console.dir({next}, { depth: null });
+        // console.dir({ 'this.recipes':this.recipes }, { depth: null });
+        this.recipes = [next, ...(this.recipes || [])];
+
+        return sourceDirs;
+      }
+
+      let outfile = this.to ?? './';
+      if (outfile.endsWith(sep)) {
+        outfile = join(outfile, basename(this.from));
+      }
+      await copyFile(this.source, outfile);
 
       return sourceDirs;
     }
 
-    const root = await generateVirtualFileTree(source, { exclude: this.excludeDirs });
+    await promises.mkdir(this.to, { recursive: true });
+
+    const root = await generateVirtualFileTree(this.source, { exclude: this.exclude });
     const renderer = new Renderer(root, this.to);
 
-    await this.runRecipeScript('before', { FST_SRC: source });
+    await this.runRecipeScript('before', { FST_SRC: this.source });
 
     if (typeof this.fileHandler === 'string') {
       if (!(await exists(this.fileHandler))) {
-        await require(join(source, this.fileHandler))(this, renderer);
+        await require(join(this.source, this.fileHandler))(this, renderer);
       } else {
         await require(resolve(this.fileHandler))(this, renderer);
       }
@@ -219,7 +272,7 @@ export class Recipe implements RecipeSchema {
 
     await renderer.renderTree();
 
-    await this.runRecipeScript('after', { FST_SRC: source });
+    await this.runRecipeScript('after', { FST_SRC: this.source });
 
     return sourceDirs;
   }
@@ -229,19 +282,21 @@ export class Recipe implements RecipeSchema {
     if (Array.isArray(this.schema)) {
       throw new InvalidSchemaError('schema top level cannot be array');
     }
+    // append number if name exists in map?
     this.name = schema.name || schema.from || schema.to || 'unnamed recipe';
 
     this.data = schema.data;
-    this.depends = schema.depends || [];
+    this.depends ||= schema.depends || [];
     this.fileHandler = schema.fileHandler;
-    this.from = schema.from;
+    this.from = schema.from?.replace('$PWD', process.cwd());
     this.recipes = schema.recipes || [];
     this.scripts = schema.scripts;
     this.to = schema.to?.[0] === '/' ? schema.to : join(options.output || '.', schema.to || '.');
     this.previousOutput = options.previousOutput || process.cwd();
-    this.excludeDirs = options?.exclude ? (schema.excludeDirs || []).concat(options.exclude) : schema.excludeDirs;
+    this.exclude = options?.exclude ? (schema.exclude || []).concat(options.exclude) : schema.exclude;
     this.includeDirs = schema.includeDirs;
     this.type = null;
+    this.source = this.from;
 
     return this;
   }

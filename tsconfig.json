@@ -1,6 +1,6 @@
 {
-  /* https://github.com/tsconfig/bases/blob/main/bases/node16.json */
-  "extends": "@tsconfig/node16/tsconfig.json",
+  /* https://github.com/tsconfig/bases/blob/main/bases/node20.json */
+  "extends": "@tsconfig/node20/tsconfig.json",
   "compilerOptions": {
     "declaration": true,
     "emitDecoratorMetadata": true,
@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "rootDir": ".",
     "sourceMap": true,
-    "strictNullChecks": false
+    "strictNullChecks": false,
   },
   "include": [
     "src",

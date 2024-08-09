@@ -125,13 +125,13 @@ export class VirtualFile {
   getGenerationTargets(name?: string | PathGetter): string[] {
     const getFileName = this.getPathBuilder(name);
 
-    return this.getPrevOut().map((out) => join(out, getFileName(out)));
+    return this.getParentOutputs().map((out) => join(out, getFileName(out)));
   }
 
   async mkdir(name?: string | PathGetter): Promise<string[]> {
     const getFileName = this.getPathBuilder(name);
 
-    const prev = this.getPrevOut();
+    const prev = this.getParentOutputs();
     if (prev?.length) {
       await Promise.all(
         prev.map(async (out) => {
@@ -152,7 +152,7 @@ export class VirtualFile {
     const getFileName = this.getPathBuilder(name);
 
     await Promise.all(
-      this.getPrevOut().map(async (out) => {
+      this.getParentOutputs().map(async (out) => {
         const output = join(out, getFileName(out));
 
         return promises
@@ -178,6 +178,10 @@ export class VirtualFile {
     return this.outputs;
   }
 
+  getParentOutputs(): string[] {
+    return this.baseUrl ? [this.baseUrl] : this.parent?.outputs;
+  }
+
   toJSON(): Record<string, any> {
     return {
       ...this,
@@ -197,10 +201,6 @@ export class VirtualFile {
     }
 
     return () => this.name;
-  }
-
-  private getPrevOut(): string[] {
-    return this.baseUrl ? [this.baseUrl] : this.parent?.outputs;
   }
 
   private prepare(): void {

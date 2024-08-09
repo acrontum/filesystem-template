@@ -47,6 +47,13 @@ export class Renderer {
     this.handlers.push({ run, options });
   }
 
+  /**
+   * Skip all files. Useful when simply running render scripts
+   */
+  noop(): void {
+    this.onFile((node) => ((node.skip = true), null));
+  }
+
   async renderTree(opt?: RenderOptions): Promise<void> {
     if (opt?.cleanFirst) {
       await promises.rm(this.dest, { recursive: true, force: true });
@@ -68,7 +75,7 @@ export class Renderer {
             }
           }
 
-          if (!node.outputs.length && !node.skip) {
+          if (!node.outputs?.length && !node.skip) {
             await node.generateFiles();
           }
 
